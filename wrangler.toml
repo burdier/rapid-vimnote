@@ -11,4 +11,4 @@ run_worker_first = ["/api/*", "/s/*"]
 [[d1_databases]]
 binding = "DB"
 database_name = "rapid-vimnote"
-database_id = "REPLACE_WITH_D1_DATABASE_ID"
+database_id = "51c03513-1255-4d1c-99ff-65f559ccb7a9"
