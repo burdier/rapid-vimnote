@@ -1,0 +1,17 @@
+{
+  "name": "rapid-vimnote",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "deploy:ps": "powershell -ExecutionPolicy Bypass -File ./deploy.ps1",
+    "db:create": "wrangler d1 create rapid-vimnote",
+    "db:apply:local": "wrangler d1 execute rapid-vimnote --local --file=./db/schema.sql",
+    "db:apply:remote": "wrangler d1 execute rapid-vimnote --remote --file=./db/schema.sql --yes"
+  },
+  "devDependencies": {
+    "wrangler": "^4.15.0"
+  }
+}

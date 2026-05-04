@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="theme-color" content="#17130f">
+    <meta name="description" content="Nota temporal offline-first con editor tipo vim.">
+    <title>Rapid Vimnote</title>
+    <link rel="manifest" href="/manifest.webmanifest">
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body>
+    <main class="shell" id="app">
+      <section class="terminal" aria-label="Rapid Vimnote">
+        <header class="topbar">
+          <div class="traffic" aria-hidden="true">
+            <span class="crest">rv</span>
+          </div>
+          <div class="promptline">
+            <span class="muted">rapid</span><span class="at">/</span><span>vimnote</span>
+            <span class="path">cuaderno</span><span id="topicLabel">locked</span>
+          </div>
+          <div class="net" id="netState">offline-first</div>
+        </header>
+
+        <div class="desktop">
+          <aside class="pane">
+            <div class="pane-title">cuadernos</div>
+            <div class="topic-list" id="topicList"></div>
+          </aside>
+
+          <section class="editor-wrap">
+            <div class="boot" id="boot">
+              <form class="login" id="loginForm" autocomplete="off">
+                <div class="brand">
+                  <span class="brand-mark">rv</span>
+                  <div>
+                    <h1>Rapid Vimnote</h1>
+                    <p>cuaderno privado de bolsillo</p>
+                  </div>
+                </div>
+                <label>
+                  <span>PIN</span>
+                  <input id="pinInput" name="pin" type="password" inputmode="numeric" minlength="4" autocomplete="off" required>
+                </label>
+                <label>
+                  <span>cuaderno</span>
+                  <input id="topicInput" name="topic" type="text" maxlength="64" autocomplete="off" spellcheck="false" required>
+                </label>
+                <button type="submit">abrir</button>
+              </form>
+            </div>
+
+            <div class="share-view" id="shareView" hidden>
+              <div class="share-meta" id="shareMeta">public share</div>
+              <pre id="shareText"></pre>
+            </div>
+
+            <textarea id="editor" spellcheck="false" autocomplete="off" autocorrect="off" autocapitalize="off"></textarea>
+            <div class="command" id="commandBar" hidden>
+              <span>:</span>
+              <input id="commandInput" autocomplete="off" spellcheck="false">
+            </div>
+          </section>
+        </div>
+
+        <footer class="status">
+          <span id="mode">LOCKED</span>
+          <span id="revision">rev 0</span>
+          <span id="dirty">clean</span>
+          <span id="message">listo</span>
+        </footer>
+      </section>
+    </main>
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>

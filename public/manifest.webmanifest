@@ -1,0 +1,9 @@
+{
+  "name": "Rapid Vimnote",
+  "short_name": "Vimnote",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#17130f",
+  "theme_color": "#17130f",
+  "icons": []
+}
