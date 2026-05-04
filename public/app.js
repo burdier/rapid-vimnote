@@ -17,6 +17,7 @@ const els = {
   dirty: $("dirty"),
   message: $("message"),
   netState: $("netState"),
+  shareButton: $("shareButton"),
   shareView: $("shareView"),
   shareMeta: $("shareMeta"),
   shareText: $("shareText")
@@ -78,6 +79,15 @@ function wireEvents() {
 
   els.editor.addEventListener("keydown", handleEditorKeydown);
   els.commandInput.addEventListener("keydown", handleCommandKeydown);
+  els.shareButton.addEventListener("click", async () => {
+    if (!state.key) {
+      flash("abre un cuaderno primero");
+      return;
+    }
+
+    await saveLocalNow();
+    await createPublicShare("5m");
+  });
 
   els.topicList.addEventListener("click", async (event) => {
     const button = event.target.closest("[data-topic]");
@@ -108,6 +118,7 @@ async function unlockTopic(pin, topic) {
   localStorage.setItem("rapid-vimnote:last-topic", topic);
   els.topicLabel.textContent = topic;
   els.boot.hidden = true;
+  els.shareButton.hidden = false;
   els.shareView.hidden = true;
   setMode("normal");
 
@@ -463,6 +474,7 @@ function parseTtl(text) {
 async function openShare() {
   els.boot.hidden = true;
   els.editor.hidden = true;
+  els.shareButton.hidden = true;
   els.shareView.hidden = false;
   setMode("SHARE");
 
@@ -509,6 +521,7 @@ function lock() {
   state.dirty = false;
   els.editor.value = "";
   els.boot.hidden = false;
+  els.shareButton.hidden = true;
   els.pinInput.value = "";
   els.pinInput.focus();
   els.topicLabel.textContent = "locked";

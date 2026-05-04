@@ -35,6 +35,8 @@ La UI usa una version simple con colores mate y referencias barrocas discretas: 
 - `/texto`: buscar texto.
 - `dd`, `yy`, `p`, `h`, `j`, `k`, `l`, `0`, `$`, `x`: gestos basicos tipo vim.
 
+Tambien hay un boton visible `Compartir 5m` en la barra superior cuando el cuaderno esta abierto.
+
 ## Desarrollo
 
 ```powershell

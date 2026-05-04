@@ -156,6 +156,27 @@ textarea {
   white-space: nowrap;
 }
 
+.top-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  min-width: 0;
+}
+
+.share-button {
+  min-height: 32px;
+  padding: 0 12px;
+  border-color: #9c754d;
+  background: #423124;
+  color: var(--gold);
+  white-space: nowrap;
+}
+
+.share-button[hidden] {
+  display: none;
+}
+
 .desktop {
   position: relative;
   z-index: 2;
@@ -464,10 +485,24 @@ button:hover {
 
   .topbar {
     grid-template-columns: 1fr auto;
+    gap: 10px;
   }
 
   .traffic {
     display: none;
+  }
+
+  .top-actions {
+    gap: 8px;
+  }
+
+  .net {
+    display: none;
+  }
+
+  .share-button {
+    min-height: 34px;
+    padding: 0 10px;
   }
 
   .desktop {
