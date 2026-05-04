@@ -20,6 +20,7 @@ const els = {
   dirty: $("dirty"),
   message: $("message"),
   netState: $("netState"),
+  topicLinkButton: $("topicLinkButton"),
   modeSwitchButton: $("modeSwitchButton"),
   wallpaperButton: $("wallpaperButton"),
   shareButton: $("shareButton"),
@@ -73,7 +74,7 @@ async function init() {
     return;
   }
 
-  const lastTopic = localStorage.getItem("rapid-vimnote:last-topic") || "";
+  const lastTopic = topicFromPath() || localStorage.getItem("rapid-vimnote:last-topic") || "";
   els.topicInput.value = lastTopic;
   els.pinInput.focus();
   setVimMode("locked");
@@ -105,6 +106,11 @@ function wireEvents() {
     if (!state.key) return;
     await saveLocalNow();
     switchUiMode(state.uiMode === "nerd" ? "normal" : "nerd");
+  });
+
+  els.topicLinkButton.addEventListener("click", async () => {
+    if (!state.topic) return;
+    await copyShortTopicLink();
   });
 
   els.wallpaperButton.addEventListener("click", () => {
@@ -209,9 +215,11 @@ async function unlockTopic(pin, topic) {
   state.editorOpen = false;
 
   localStorage.setItem("rapid-vimnote:last-topic", topic);
+  setShortTopicPath(topic);
   els.topicLabel.textContent = topic;
   els.boot.hidden = true;
   els.shareView.hidden = true;
+  els.topicLinkButton.hidden = false;
   els.modeSwitchButton.hidden = false;
   els.wallpaperButton.hidden = false;
   els.shareButton.hidden = false;
@@ -996,6 +1004,7 @@ async function openShare() {
   els.boot.hidden = true;
   els.editor.hidden = true;
   els.modeSwitchButton.hidden = true;
+  els.topicLinkButton.hidden = true;
   els.wallpaperButton.hidden = true;
   els.shareButton.hidden = true;
   els.normalDesktop.hidden = true;
@@ -1066,6 +1075,7 @@ function lock() {
   els.desktopWindow.hidden = true;
   els.boot.hidden = false;
   els.modeSwitchButton.hidden = true;
+  els.topicLinkButton.hidden = true;
   els.wallpaperButton.hidden = true;
   els.shareButton.hidden = true;
   els.normalDesktop.hidden = true;
@@ -1088,6 +1098,46 @@ function renderStatus(message) {
 
 function flash(message) {
   els.message.textContent = message;
+}
+
+function topicFromPath() {
+  const parts = location.pathname.split("/").filter(Boolean).map((part) => decodeURIComponent(part));
+  if (!parts.length) return "";
+
+  if (parts[0] === "t" && parts[1]) {
+    return normalizeTopic(parts[1]);
+  }
+
+  const reserved = new Set([
+    "api",
+    "s",
+    "app.js",
+    "styles.css",
+    "sw.js",
+    "manifest.webmanifest",
+    "favicon.ico"
+  ]);
+
+  if (reserved.has(parts[0])) return "";
+  return normalizeTopic(parts[0]);
+}
+
+function shortTopicLink(topic = state.topic) {
+  return `${location.origin}/${encodeURIComponent(topic)}`;
+}
+
+function setShortTopicPath(topic) {
+  if (!topic || location.pathname.startsWith("/s/")) return;
+  const nextPath = `/${encodeURIComponent(topic)}`;
+  if (location.pathname !== nextPath) {
+    history.replaceState(null, "", nextPath);
+  }
+}
+
+async function copyShortTopicLink() {
+  const link = shortTopicLink();
+  await copyText(link);
+  renderStatus(`link copiado: ${link}`);
 }
 
 function createFile(name, content = "", x = 28, y = 28) {

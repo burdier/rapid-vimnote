@@ -123,7 +123,7 @@ async function createShare(request, env) {
   const ttlSeconds = clampTtl(body.ttlSeconds);
   const now = Date.now();
   const expiresAt = now + ttlSeconds * 1000;
-  const token = randomToken(18);
+  const token = randomToken(6);
 
   await cleanupExpiredShares(env, now);
 

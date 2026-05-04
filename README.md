@@ -30,6 +30,18 @@ Rapid Vimnote tiene dos modos para el mismo cuaderno cifrado:
 
 El boton `Modo nerd` / `Modo normal` cambia entre ambos sin cambiar de cuaderno.
 
+## Links faciles
+
+Cada cuaderno usa una URL corta basada en su nombre. Si tu dominio es `https://notas.dev` y el cuaderno se llama `ideas`, la URL queda:
+
+```text
+https://notas.dev/ideas
+```
+
+Esa URL solo prellena el cuaderno. Para abrirlo desde otro navegador todavia necesitas el mismo PIN.
+
+El boton `Link` copia esa URL corta. Los links publicos de `Compartir` siguen incluyendo una llave larga despues de `#` porque esa parte cifra el contenido compartido.
+
 ## Comandos nerd
 
 - `ls`: lista archivos.
