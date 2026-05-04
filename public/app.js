@@ -2,6 +2,9 @@ const $ = (id) => document.getElementById(id);
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 
+const WORKSPACE_MARKER = "rapid-vimnote.workspace.v2";
+const WALLPAPERS = ["walnut", "moss", "wine", "blue"];
+
 const els = {
   boot: $("boot"),
   loginForm: $("loginForm"),
@@ -17,14 +20,30 @@ const els = {
   dirty: $("dirty"),
   message: $("message"),
   netState: $("netState"),
+  modeSwitchButton: $("modeSwitchButton"),
+  wallpaperButton: $("wallpaperButton"),
   shareButton: $("shareButton"),
   shareView: $("shareView"),
   shareMeta: $("shareMeta"),
-  shareText: $("shareText")
+  shareText: $("shareText"),
+  normalDesktop: $("normalDesktop"),
+  desktopCanvas: $("desktopCanvas"),
+  desktopWindow: $("desktopWindow"),
+  desktopWindowTitle: $("desktopWindowTitle"),
+  desktopEditor: $("desktopEditor"),
+  desktopShareButton: $("desktopShareButton"),
+  desktopCloseButton: $("desktopCloseButton"),
+  nerdShell: $("nerdShell"),
+  terminalOutput: $("terminalOutput"),
+  terminalForm: $("terminalForm"),
+  terminalPrompt: $("terminalPrompt"),
+  terminalInput: $("terminalInput"),
+  contextMenu: $("contextMenu")
 };
 
 const state = {
-  mode: "locked",
+  vimMode: "locked",
+  uiMode: localStorage.getItem("rapid-vimnote:ui-mode") || "normal",
   session: null,
   topic: "",
   topicId: "",
@@ -32,7 +51,12 @@ const state = {
   revision: 0,
   dirty: false,
   saveTimer: null,
-  lastText: "",
+  workspace: null,
+  currentFile: "note.txt",
+  desktopSelectedFile: "",
+  contextTargetFile: "",
+  contextPoint: { x: 28, y: 28 },
+  editorOpen: false,
   yank: ""
 };
 
@@ -52,41 +76,109 @@ async function init() {
   const lastTopic = localStorage.getItem("rapid-vimnote:last-topic") || "";
   els.topicInput.value = lastTopic;
   els.pinInput.focus();
-  setMode("locked");
+  setVimMode("locked");
+  applyUiMode("normal");
 }
 
 function wireEvents() {
   window.addEventListener("online", updateNetwork);
   window.addEventListener("offline", updateNetwork);
+  window.addEventListener("click", (event) => {
+    if (!event.target.closest(".context-menu")) hideContextMenu();
+  });
+  window.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") hideContextMenu();
+  });
 
   els.loginForm.addEventListener("submit", async (event) => {
     event.preventDefault();
     const pin = els.pinInput.value.trim();
     const topic = normalizeTopic(els.topicInput.value);
     if (!pin || !topic) {
-      flash("pin y topic son requeridos");
+      flash("pin y cuaderno son requeridos");
       return;
     }
     await unlockTopic(pin, topic);
   });
 
-  els.editor.addEventListener("input", () => {
-    state.dirty = true;
-    state.lastText = els.editor.value;
-    renderStatus("editando local");
-    scheduleLocalSave();
+  els.modeSwitchButton.addEventListener("click", async () => {
+    if (!state.key) return;
+    await saveLocalNow();
+    switchUiMode(state.uiMode === "nerd" ? "normal" : "nerd");
   });
 
-  els.editor.addEventListener("keydown", handleEditorKeydown);
-  els.commandInput.addEventListener("keydown", handleCommandKeydown);
+  els.wallpaperButton.addEventListener("click", () => {
+    cycleWallpaper();
+  });
+
   els.shareButton.addEventListener("click", async () => {
     if (!state.key) {
       flash("abre un cuaderno primero");
       return;
     }
-
     await saveLocalNow();
-    await createPublicShare("5m");
+    await createPublicShare("5m", state.currentFile);
+  });
+
+  els.editor.addEventListener("input", () => {
+    commitVimEditor();
+    markDirty("editando en vim");
+  });
+  els.editor.addEventListener("keydown", handleEditorKeydown);
+  els.commandInput.addEventListener("keydown", handleCommandKeydown);
+
+  els.terminalForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const raw = els.terminalInput.value;
+    els.terminalInput.value = "";
+    await runTerminalCommand(raw);
+  });
+
+  els.desktopCanvas.addEventListener("contextmenu", (event) => {
+    event.preventDefault();
+    const fileEl = event.target.closest("[data-file]");
+    state.contextTargetFile = fileEl ? fileEl.dataset.file : "";
+    state.contextPoint = desktopPointFromEvent(event);
+    showContextMenu(event.clientX, event.clientY, Boolean(fileEl));
+  });
+
+  els.desktopCanvas.addEventListener("click", (event) => {
+    const fileEl = event.target.closest("[data-file]");
+    if (!fileEl) {
+      state.desktopSelectedFile = "";
+      renderDesktop();
+      return;
+    }
+    state.desktopSelectedFile = fileEl.dataset.file;
+    renderDesktop();
+  });
+
+  els.desktopCanvas.addEventListener("dblclick", (event) => {
+    const fileEl = event.target.closest("[data-file]");
+    if (fileEl) openDesktopFile(fileEl.dataset.file);
+  });
+
+  els.contextMenu.addEventListener("click", async (event) => {
+    const button = event.target.closest("[data-action]");
+    if (!button) return;
+    await runContextAction(button.dataset.action);
+  });
+
+  els.desktopEditor.addEventListener("input", () => {
+    commitDesktopEditor();
+    markDirty("editando archivo");
+  });
+
+  els.desktopCloseButton.addEventListener("click", async () => {
+    commitDesktopEditor();
+    await saveLocalNow();
+    els.desktopWindow.hidden = true;
+  });
+
+  els.desktopShareButton.addEventListener("click", async () => {
+    const ttl = prompt("Tiempo para compartir: 30s, 5m, 15m, 1h", "5m") || "5m";
+    await saveLocalNow();
+    await createPublicShare(ttl, state.currentFile);
   });
 
   els.topicList.addEventListener("click", async (event) => {
@@ -98,9 +190,7 @@ function wireEvents() {
   });
 
   window.addEventListener("beforeunload", () => {
-    if (state.dirty) {
-      saveLocalNow();
-    }
+    if (state.dirty) saveLocalNow();
   });
 }
 
@@ -113,32 +203,35 @@ async function unlockTopic(pin, topic) {
   state.key = session.key;
   state.revision = 0;
   state.dirty = false;
-  state.lastText = "";
+  state.workspace = createWorkspace();
+  state.currentFile = "note.txt";
+  state.desktopSelectedFile = "";
+  state.editorOpen = false;
 
   localStorage.setItem("rapid-vimnote:last-topic", topic);
   els.topicLabel.textContent = topic;
   els.boot.hidden = true;
-  els.shareButton.hidden = false;
   els.shareView.hidden = true;
-  setMode("normal");
+  els.modeSwitchButton.hidden = false;
+  els.wallpaperButton.hidden = false;
+  els.shareButton.hidden = false;
 
   const local = await loadLocal(topic);
   if (local) {
-    const text = await decryptText(state.key, local.iv, local.bodyCipher);
-    els.editor.value = text;
-    state.lastText = text;
+    const payload = await decryptText(state.key, local.iv, local.bodyCipher);
+    applyWorkspace(parseWorkspace(payload));
     state.revision = local.revision || 0;
     state.dirty = Boolean(local.dirty);
-    renderStatus(local.dirty ? "local pendiente de sync" : "nota local cargada");
+    renderStatus(local.dirty ? "local pendiente de sync" : "cuaderno local cargado");
   } else {
-    els.editor.value = "";
-    renderStatus("nota nueva");
+    applyWorkspace(createWorkspace());
+    renderStatus("cuaderno nuevo");
   }
 
   await syncFromRemote();
   await saveTopicMeta(topic);
   renderTopics();
-  els.editor.focus();
+  switchUiMode(state.uiMode);
 }
 
 async function syncFromRemote() {
@@ -159,19 +252,16 @@ async function syncFromRemote() {
     if (!remote.found) return;
 
     if (remote.revision > state.revision && !state.dirty) {
-      const text = await decryptText(state.key, remote.iv, remote.bodyCipher);
-      els.editor.value = text;
-      state.lastText = text;
+      const payload = await decryptText(state.key, remote.iv, remote.bodyCipher);
+      applyWorkspace(parseWorkspace(payload));
       state.revision = remote.revision;
       state.dirty = false;
-      await saveEncryptedLocal(text, false);
+      await saveEncryptedLocal(serializeWorkspace(), false);
       renderStatus("sync remoto recibido");
       return;
     }
 
-    if (state.dirty) {
-      await syncToRemote(false);
-    }
+    if (state.dirty) await syncToRemote(false);
   } catch {
     renderStatus("sin red usable, seguimos local");
   }
@@ -183,8 +273,8 @@ async function syncToRemote(force) {
     return;
   }
 
-  const text = els.editor.value;
-  const encrypted = await encryptText(state.key, text);
+  const payload = serializeWorkspace();
+  const encrypted = await encryptText(state.key, payload);
 
   try {
     const response = await api("/api/notes/put", {
@@ -200,13 +290,13 @@ async function syncToRemote(force) {
 
     if (response.status === 409) {
       const conflict = await response.json();
-      const serverText = await decryptText(state.key, conflict.server.iv, conflict.server.bodyCipher);
-      const merged = mergeConflict(text, serverText);
-      els.editor.value = merged;
-      state.lastText = merged;
+      const serverPayload = await decryptText(state.key, conflict.server.iv, conflict.server.bodyCipher);
+      const serverWorkspace = parseWorkspace(serverPayload);
+      state.workspace = mergeWorkspaces(state.workspace, serverWorkspace);
       state.revision = conflict.server.revision;
       state.dirty = true;
-      await saveEncryptedLocal(merged, true);
+      renderWorkspaceViews();
+      await saveEncryptedLocal(serializeWorkspace(), true);
       renderStatus("conflicto mezclado, usa :w! para forzar");
       return;
     }
@@ -214,39 +304,126 @@ async function syncToRemote(force) {
     const saved = await response.json();
     state.revision = saved.revision;
     state.dirty = false;
-    await saveEncryptedLocal(text, false);
+    await saveEncryptedLocal(payload, false);
     renderStatus("sync ok");
   } catch {
-    await saveEncryptedLocal(text, true);
+    await saveEncryptedLocal(payload, true);
     renderStatus("red fallo, quedo local");
   }
 }
 
-function mergeConflict(localText, serverText) {
-  if (localText === serverText) return localText;
-  return [
-    serverText,
-    "",
-    "# --- local pendiente ---",
-    localText
-  ].join("\n");
+function createWorkspace(content = "") {
+  const now = Date.now();
+  return {
+    marker: WORKSPACE_MARKER,
+    version: 2,
+    wallpaper: "walnut",
+    currentFile: "note.txt",
+    files: {
+      "note.txt": {
+        type: "text",
+        content,
+        createdAt: now,
+        updatedAt: now,
+        x: 28,
+        y: 28
+      }
+    }
+  };
 }
 
-function scheduleLocalSave() {
-  clearTimeout(state.saveTimer);
-  state.saveTimer = setTimeout(async () => {
-    await saveLocalNow();
-    syncToRemote(false);
-  }, 900);
+function parseWorkspace(payload) {
+  try {
+    const parsed = JSON.parse(payload);
+    if (parsed && parsed.marker === WORKSPACE_MARKER && parsed.files && typeof parsed.files === "object") {
+      return normalizeWorkspace(parsed);
+    }
+  } catch {
+    return createWorkspace(payload || "");
+  }
+  return createWorkspace(payload || "");
+}
+
+function normalizeWorkspace(workspace) {
+  const now = Date.now();
+  const normalized = {
+    marker: WORKSPACE_MARKER,
+    version: 2,
+    wallpaper: WALLPAPERS.includes(workspace.wallpaper) ? workspace.wallpaper : "walnut",
+    currentFile: "",
+    files: {}
+  };
+
+  for (const [name, file] of Object.entries(workspace.files || {})) {
+    const source = file && typeof file === "object" ? file : {};
+    const safeName = normalizeFileName(name, "note.txt");
+    normalized.files[safeName] = {
+      type: "text",
+      content: typeof source.content === "string" ? source.content : "",
+      createdAt: Number.isFinite(source.createdAt) ? source.createdAt : now,
+      updatedAt: Number.isFinite(source.updatedAt) ? source.updatedAt : now,
+      x: Number.isFinite(source.x) ? source.x : 28 + Object.keys(normalized.files).length * 92,
+      y: Number.isFinite(source.y) ? source.y : 28
+    };
+  }
+
+  if (!Object.keys(normalized.files).length) {
+    return createWorkspace();
+  }
+
+  normalized.currentFile = normalized.files[workspace.currentFile] ? workspace.currentFile : Object.keys(normalized.files)[0];
+  return normalized;
+}
+
+function applyWorkspace(workspace) {
+  state.workspace = normalizeWorkspace(workspace);
+  state.currentFile = state.workspace.currentFile;
+  state.desktopSelectedFile = state.currentFile;
+  renderWorkspaceViews();
+}
+
+function serializeWorkspace() {
+  commitActiveEditors();
+  if (!state.workspace) state.workspace = createWorkspace();
+  state.workspace.currentFile = state.currentFile || firstFileName();
+  return JSON.stringify(state.workspace);
+}
+
+function mergeWorkspaces(localWorkspace, serverWorkspace) {
+  const merged = normalizeWorkspace(serverWorkspace);
+  const local = normalizeWorkspace(localWorkspace);
+  const stamp = new Date().toISOString().replace(/[-:T.Z]/g, "").slice(0, 12);
+
+  for (const [name, file] of Object.entries(local.files)) {
+    if (!merged.files[name]) {
+      merged.files[name] = file;
+      continue;
+    }
+
+    if (merged.files[name].content !== file.content) {
+      const copyName = uniqueFileName(`${withoutExtension(name)}.local-${stamp}.txt`);
+      merged.files[copyName] = { ...file, x: file.x + 30, y: file.y + 30 };
+    }
+  }
+
+  merged.currentFile = local.currentFile || merged.currentFile;
+  return merged;
+}
+
+function renderWorkspaceViews() {
+  renderDesktop();
+  renderTerminalPrompt();
+  if (state.editorOpen) openVim(state.currentFile, false);
+  if (!els.desktopWindow.hidden) openDesktopFile(state.currentFile, false);
 }
 
 async function saveLocalNow() {
   if (!state.key || !state.topic) return;
-  await saveEncryptedLocal(els.editor.value, state.dirty);
+  await saveEncryptedLocal(serializeWorkspace(), state.dirty);
 }
 
-async function saveEncryptedLocal(text, dirty) {
-  const encrypted = await encryptText(state.key, text);
+async function saveEncryptedLocal(payload, dirty) {
+  const encrypted = await encryptText(state.key, payload);
   const db = await openDb();
   const record = {
     topic: state.topic,
@@ -284,7 +461,7 @@ async function renderTopics() {
   if (!topics.length) {
     const empty = document.createElement("div");
     empty.className = "topic-item";
-    empty.textContent = "sin topics";
+    empty.textContent = "sin cuadernos";
     els.topicList.append(empty);
     return;
   }
@@ -300,11 +477,334 @@ async function renderTopics() {
   }
 }
 
+function switchUiMode(mode) {
+  state.uiMode = mode === "nerd" ? "nerd" : "normal";
+  localStorage.setItem("rapid-vimnote:ui-mode", state.uiMode);
+  applyUiMode(state.uiMode);
+}
+
+function applyUiMode(mode) {
+  hideContextMenu();
+  closeCommand();
+  els.modeSwitchButton.textContent = mode === "nerd" ? "Modo normal" : "Modo nerd";
+  els.wallpaperButton.hidden = !state.key || mode === "nerd";
+
+  if (!state.key) {
+    els.normalDesktop.hidden = true;
+    els.nerdShell.hidden = true;
+    els.editor.hidden = true;
+    return;
+  }
+
+  if (mode === "nerd") {
+    state.editorOpen = false;
+    els.normalDesktop.hidden = true;
+    els.nerdShell.hidden = false;
+    els.editor.hidden = true;
+    setVimMode("shell");
+    renderTerminalPrompt();
+    if (!els.terminalOutput.dataset.booted) {
+      writeTerminal("Rapid Vimnote shell. Usa ls, cat, echo, touch, vim, share, sync, help.");
+      els.terminalOutput.dataset.booted = "1";
+    }
+    els.terminalInput.focus();
+    return;
+  }
+
+  state.editorOpen = false;
+  els.nerdShell.hidden = true;
+  els.normalDesktop.hidden = false;
+  els.editor.hidden = true;
+  setVimMode("desktop");
+  renderDesktop();
+}
+
+function renderDesktop() {
+  if (!state.workspace) return;
+  els.normalDesktop.dataset.wallpaper = state.workspace.wallpaper || "walnut";
+  els.desktopCanvas.innerHTML = "";
+
+  for (const [name, file] of Object.entries(state.workspace.files)) {
+    const icon = document.createElement("button");
+    icon.type = "button";
+    icon.className = "file-icon";
+    if (name === state.desktopSelectedFile) icon.classList.add("selected");
+    icon.dataset.file = name;
+    icon.style.left = `${Math.max(8, file.x || 28)}px`;
+    icon.style.top = `${Math.max(8, file.y || 28)}px`;
+    icon.innerHTML = `<span class="file-paper">txt</span><span>${escapeHtml(name)}</span>`;
+    els.desktopCanvas.append(icon);
+  }
+}
+
+function openDesktopFile(fileName, focus = true) {
+  const file = getFile(fileName);
+  if (!file) return;
+  state.currentFile = fileName;
+  state.workspace.currentFile = fileName;
+  state.desktopSelectedFile = fileName;
+  els.desktopWindow.hidden = false;
+  els.desktopWindowTitle.textContent = fileName;
+  if (els.desktopEditor.value !== file.content) els.desktopEditor.value = file.content;
+  renderDesktop();
+  renderStatus(`abierto ${fileName}`);
+  if (focus) els.desktopEditor.focus();
+}
+
+function commitDesktopEditor() {
+  if (els.desktopWindow.hidden || !state.currentFile) return;
+  const file = getFile(state.currentFile);
+  if (!file) return;
+  if (file.content !== els.desktopEditor.value) {
+    file.content = els.desktopEditor.value;
+    file.updatedAt = Date.now();
+  }
+}
+
+function showContextMenu(clientX, clientY, hasFile) {
+  const actions = els.contextMenu.querySelectorAll("[data-action]");
+  actions.forEach((button) => {
+    const fileOnly = ["open-file", "share-file", "rename-file", "delete-file"].includes(button.dataset.action);
+    button.hidden = fileOnly && !hasFile;
+  });
+
+  els.contextMenu.hidden = false;
+  const rect = els.contextMenu.getBoundingClientRect();
+  const x = Math.min(clientX, window.innerWidth - rect.width - 8);
+  const y = Math.min(clientY, window.innerHeight - rect.height - 8);
+  els.contextMenu.style.left = `${Math.max(8, x)}px`;
+  els.contextMenu.style.top = `${Math.max(8, y)}px`;
+}
+
+function hideContextMenu() {
+  els.contextMenu.hidden = true;
+}
+
+async function runContextAction(action) {
+  const target = state.contextTargetFile;
+  hideContextMenu();
+
+  if (action === "new-file") {
+    const name = uniqueFileName("nuevo.txt");
+    createFile(name, "", state.contextPoint.x, state.contextPoint.y);
+    openDesktopFile(name);
+    markDirty(`creado ${name}`);
+    return;
+  }
+
+  if (action === "wallpaper") {
+    cycleWallpaper();
+    return;
+  }
+
+  if (!target) return;
+
+  if (action === "open-file") {
+    openDesktopFile(target);
+    return;
+  }
+
+  if (action === "share-file") {
+    const ttl = prompt("Tiempo para compartir: 30s, 5m, 15m, 1h", "5m") || "5m";
+    await saveLocalNow();
+    await createPublicShare(ttl, target);
+    return;
+  }
+
+  if (action === "rename-file") {
+    const next = normalizeFileName(prompt("Nuevo nombre", target) || "", target);
+    if (next && next !== target) renameFile(target, next);
+    return;
+  }
+
+  if (action === "delete-file") {
+    if (Object.keys(state.workspace.files).length <= 1) {
+      renderStatus("deja al menos un archivo");
+      return;
+    }
+    if (confirm(`Borrar ${target}?`)) deleteFile(target);
+  }
+}
+
+function desktopPointFromEvent(event) {
+  const rect = els.desktopCanvas.getBoundingClientRect();
+  return {
+    x: Math.round(event.clientX - rect.left),
+    y: Math.round(event.clientY - rect.top)
+  };
+}
+
+function cycleWallpaper() {
+  if (!state.workspace) return;
+  const current = WALLPAPERS.indexOf(state.workspace.wallpaper);
+  state.workspace.wallpaper = WALLPAPERS[(current + 1) % WALLPAPERS.length];
+  renderDesktop();
+  markDirty(`fondo ${state.workspace.wallpaper}`);
+}
+
+async function runTerminalCommand(raw) {
+  const input = raw.trim();
+  if (!input) return;
+  writeTerminal(`$ ${input}`);
+
+  const redirect = input.match(/^echo\s+(.+?)\s*(>>|>)\s+(.+)$/);
+  if (redirect) {
+    const text = unquote(redirect[1]);
+    const op = redirect[2];
+    const fileName = normalizeFileName(redirect[3], "note.txt");
+    const file = ensureFile(fileName);
+    file.content = op === ">>" ? `${file.content}${file.content ? "\n" : ""}${text}` : text;
+    file.updatedAt = Date.now();
+    state.currentFile = fileName;
+    markDirty(`${op} ${fileName}`);
+    writeTerminal(fileName);
+    return;
+  }
+
+  const args = parseArgs(input);
+  const cmd = (args[0] || "").toLowerCase();
+
+  switch (cmd) {
+    case "help":
+      writeTerminal("ls | cat file.txt | touch file.txt | echo \"texto\" >> file.txt | vim file.txt | share 5m [file] | rm file.txt | mv a b | sync | clear | desktop | lock");
+      break;
+    case "clear":
+      els.terminalOutput.innerHTML = "";
+      break;
+    case "pwd":
+      writeTerminal(`/home/rapid/${state.topic}`);
+      break;
+    case "ls":
+      writeTerminal(Object.keys(state.workspace.files).join("  ") || "(vacio)");
+      break;
+    case "cat":
+      writeTerminal(readFileForTerminal(args[1] || state.currentFile));
+      break;
+    case "touch":
+      if (!args[1]) return writeTerminal("touch: falta archivo");
+      ensureFile(args[1]).updatedAt = Date.now();
+      state.currentFile = normalizeFileName(args[1], "nuevo.txt");
+      state.workspace.currentFile = state.currentFile;
+      renderWorkspaceViews();
+      markDirty(`touch ${state.currentFile}`);
+      break;
+    case "vim":
+    case "vi":
+      openVim(normalizeFileName(args[1] || state.currentFile, "note.txt"));
+      break;
+    case "share":
+      await saveLocalNow();
+      await createPublicShare(args[1] || "5m", args[2] || state.currentFile);
+      break;
+    case "sync":
+      await saveLocalNow();
+      await syncFromRemote();
+      await syncToRemote(false);
+      break;
+    case "rm":
+      if (!args[1]) return writeTerminal("rm: falta archivo");
+      deleteFile(args[1], false);
+      break;
+    case "mv":
+      if (!args[1] || !args[2]) return writeTerminal("mv: usa mv origen destino");
+      renameFile(args[1], args[2]);
+      break;
+    case "desktop":
+    case "normal":
+      switchUiMode("normal");
+      break;
+    case "lock":
+    case "exit":
+      await saveLocalNow();
+      lock();
+      break;
+    case "w":
+    case "write":
+      await commandWrite(false);
+      break;
+    default:
+      writeTerminal(`${cmd}: comando no encontrado`);
+  }
+}
+
+function writeTerminal(text) {
+  const block = document.createElement("div");
+  block.textContent = text;
+  els.terminalOutput.append(block);
+  els.terminalOutput.scrollTop = els.terminalOutput.scrollHeight;
+}
+
+function renderTerminalPrompt() {
+  els.terminalPrompt.textContent = `~/` + (state.topic || "locked") + " $";
+}
+
+function readFileForTerminal(fileName) {
+  const file = getFile(fileName);
+  if (!file) return `cat: ${fileName}: no existe`;
+  return file.content || "";
+}
+
+function parseArgs(input) {
+  const args = [];
+  input.replace(/"([^"]*)"|'([^']*)'|(\S+)/g, (_, doubleQuoted, singleQuoted, bare) => {
+    args.push(doubleQuoted ?? singleQuoted ?? bare);
+    return "";
+  });
+  return args;
+}
+
+function unquote(value) {
+  const trimmed = String(value).trim();
+  if ((trimmed.startsWith('"') && trimmed.endsWith('"')) || (trimmed.startsWith("'") && trimmed.endsWith("'"))) {
+    return trimmed.slice(1, -1);
+  }
+  return trimmed;
+}
+
+function openVim(fileName, focus = true) {
+  const safeName = normalizeFileName(fileName, "note.txt");
+  const file = ensureFile(safeName);
+  state.currentFile = safeName;
+  state.workspace.currentFile = safeName;
+  state.editorOpen = true;
+  els.editor.hidden = false;
+  els.editor.value = file.content;
+  setVimMode("normal");
+  renderStatus(`vim ${safeName}`);
+  if (focus) els.editor.focus();
+}
+
+function closeVim() {
+  commitVimEditor();
+  state.editorOpen = false;
+  els.editor.hidden = true;
+  closeCommand();
+  setVimMode(state.uiMode === "nerd" ? "shell" : "desktop");
+  if (state.uiMode === "nerd") els.terminalInput.focus();
+}
+
+function commitVimEditor() {
+  if (!state.editorOpen || !state.currentFile) return;
+  const file = getFile(state.currentFile);
+  if (!file) return;
+  if (file.content !== els.editor.value) {
+    file.content = els.editor.value;
+    file.updatedAt = Date.now();
+  }
+}
+
+function commitActiveEditors() {
+  commitVimEditor();
+  commitDesktopEditor();
+}
+
 function handleEditorKeydown(event) {
+  if (!state.editorOpen) return;
+
   if (event.key === "Escape") {
     event.preventDefault();
     closeCommand();
-    setMode("normal");
+    setVimMode("normal");
     return;
   }
 
@@ -314,14 +814,14 @@ function handleEditorKeydown(event) {
     return;
   }
 
-  if (state.mode === "insert") return;
+  if (state.vimMode === "insert") return;
 
-  if (state.mode === "normal") {
+  if (state.vimMode === "normal") {
     if (event.key.length === 1 || ["Backspace", "Enter", "Tab"].includes(event.key)) {
       event.preventDefault();
     }
 
-    if (event.key === "i") return setMode("insert");
+    if (event.key === "i") return setVimMode("insert");
     if (event.key === "a") return moveAndInsert(1);
     if (event.key === "o") return openLineBelow();
     if (event.key === ":") return openCommand("");
@@ -343,7 +843,7 @@ function handleCommandKeydown(event) {
   if (event.key === "Escape") {
     event.preventDefault();
     closeCommand();
-    setMode("normal");
+    setVimMode("normal");
     els.editor.focus();
     return;
   }
@@ -352,12 +852,12 @@ function handleCommandKeydown(event) {
     event.preventDefault();
     const value = els.commandInput.value.trim();
     closeCommand();
-    runCommand(value);
+    runVimCommand(value);
   }
 }
 
 function openCommand(prefix) {
-  state.mode = "command";
+  state.vimMode = "command";
   els.commandBar.hidden = false;
   els.commandInput.value = prefix;
   els.commandInput.focus();
@@ -368,7 +868,7 @@ function closeCommand() {
   els.commandBar.hidden = true;
 }
 
-async function runCommand(raw) {
+async function runVimCommand(raw) {
   const input = raw.startsWith("/") ? `find ${raw.slice(1)}` : raw;
   const [cmd, ...rest] = input.split(/\s+/);
   const arg = rest.join(" ");
@@ -381,13 +881,25 @@ async function runCommand(raw) {
     case "w!":
       await commandWrite(true);
       break;
+    case "wq":
+      await commandWrite(false);
+      closeVim();
+      break;
     case "q":
+      await saveLocalNow();
+      closeVim();
+      break;
     case "lock":
       await saveLocalNow();
       lock();
       break;
+    case "e":
+    case "edit":
+      openVim(arg || state.currentFile);
+      break;
     case "sync":
       await syncFromRemote();
+      await syncToRemote(false);
       break;
     case "topic":
       await saveLocalNow();
@@ -395,51 +907,52 @@ async function runCommand(raw) {
       lock();
       break;
     case "ls":
-      await showTopicsMessage();
+      renderStatus(Object.keys(state.workspace.files).join(" ") || "sin archivos");
       break;
     case "share":
-      await createPublicShare(arg || "5m");
+      await createPublicShareFromText(arg || "5m", state.currentFile);
       break;
     case "find":
       findText(arg);
       break;
     case "clear":
       els.editor.value = "";
-      state.dirty = true;
-      await saveLocalNow();
-      renderStatus("buffer limpio");
+      commitVimEditor();
+      markDirty("buffer limpio");
       break;
     case "help":
-      showHelp();
+      renderStatus(":w | :q | :e file.txt | :share 5m | :ls | :sync | :lock");
       break;
     default:
       renderStatus(cmd ? `comando no existe: ${cmd}` : "sin comando");
   }
 
-  setMode("normal");
-  els.editor.focus();
+  if (state.editorOpen) {
+    setVimMode("normal");
+    els.editor.focus();
+  }
 }
 
 async function commandWrite(force) {
+  commitActiveEditors();
   await saveLocalNow();
   await syncToRemote(force);
 }
 
-async function showTopicsMessage() {
-  const topics = await listTopics();
-  renderStatus(topics.map((item) => item.topic).join(" ") || "sin topics locales");
-}
-
-function showHelp() {
-  renderStatus(":w save | :w! force | :share 5m | :topic x | :ls | :sync | :q");
-}
-
-async function createPublicShare(ttlText) {
+async function createPublicShare(ttlText, fileName = state.currentFile) {
   if (!state.key) return;
+
+  const safeName = normalizeFileName(fileName, state.currentFile);
+  const file = getFile(safeName);
+  if (!file) {
+    renderStatus(`no existe ${safeName}`);
+    if (state.uiMode === "nerd") writeTerminal(`share: ${safeName}: no existe`);
+    return;
+  }
 
   const ttlSeconds = parseTtl(ttlText);
   const shareKey = await crypto.subtle.generateKey({ name: "AES-GCM", length: 256 }, true, ["encrypt", "decrypt"]);
-  const encrypted = await encryptText(shareKey, els.editor.value);
+  const encrypted = await encryptText(shareKey, file.content);
 
   try {
     const response = await api("/api/share", {
@@ -456,10 +969,18 @@ async function createPublicShare(ttlText) {
     const raw = new Uint8Array(await crypto.subtle.exportKey("raw", shareKey));
     const link = `${location.origin}/s/${data.token}#${base64url(raw)}`;
     await copyText(link);
-    renderStatus(`share copiado, expira ${new Date(data.expiresAt).toLocaleTimeString()}`);
+    const message = `share ${safeName} copiado, expira ${new Date(data.expiresAt).toLocaleTimeString()}`;
+    renderStatus(message);
+    if (state.uiMode === "nerd") writeTerminal(link);
   } catch {
     renderStatus("no pude crear share, red no disponible");
+    if (state.uiMode === "nerd") writeTerminal("share: red no disponible");
   }
+}
+
+async function createPublicShareFromText(input, fallbackFile) {
+  const args = parseArgs(`share ${input}`);
+  await createPublicShare(args[1] || "5m", args[2] || fallbackFile);
 }
 
 function parseTtl(text) {
@@ -474,9 +995,13 @@ function parseTtl(text) {
 async function openShare() {
   els.boot.hidden = true;
   els.editor.hidden = true;
+  els.modeSwitchButton.hidden = true;
+  els.wallpaperButton.hidden = true;
   els.shareButton.hidden = true;
+  els.normalDesktop.hidden = true;
+  els.nerdShell.hidden = true;
   els.shareView.hidden = false;
-  setMode("SHARE");
+  setVimMode("share");
 
   const token = location.pathname.split("/").filter(Boolean).pop();
   const keyText = location.hash.slice(1);
@@ -505,27 +1030,50 @@ async function openShare() {
   }
 }
 
-function setMode(mode) {
-  state.mode = String(mode).toLowerCase();
-  els.editor.readOnly = state.mode !== "insert";
+function markDirty(message) {
+  state.dirty = true;
+  renderStatus(message);
+  scheduleLocalSave();
+}
+
+function scheduleLocalSave() {
+  clearTimeout(state.saveTimer);
+  state.saveTimer = setTimeout(async () => {
+    await saveLocalNow();
+    syncToRemote(false);
+  }, 900);
+}
+
+function setVimMode(mode) {
+  state.vimMode = String(mode).toLowerCase();
+  els.editor.readOnly = state.vimMode !== "insert";
   els.mode.textContent = String(mode).toUpperCase();
   renderStatus();
 }
 
 function lock() {
-  state.mode = "locked";
+  state.vimMode = "locked";
   state.session = null;
   state.key = null;
   state.topicId = "";
   state.revision = 0;
   state.dirty = false;
+  state.workspace = null;
+  state.currentFile = "note.txt";
+  state.editorOpen = false;
   els.editor.value = "";
+  els.editor.hidden = true;
+  els.desktopWindow.hidden = true;
   els.boot.hidden = false;
+  els.modeSwitchButton.hidden = true;
+  els.wallpaperButton.hidden = true;
   els.shareButton.hidden = true;
+  els.normalDesktop.hidden = true;
+  els.nerdShell.hidden = true;
   els.pinInput.value = "";
   els.pinInput.focus();
   els.topicLabel.textContent = "locked";
-  setMode("locked");
+  setVimMode("locked");
 }
 
 function updateNetwork() {
@@ -540,6 +1088,106 @@ function renderStatus(message) {
 
 function flash(message) {
   els.message.textContent = message;
+}
+
+function createFile(name, content = "", x = 28, y = 28) {
+  if (!state.workspace) state.workspace = createWorkspace();
+  const fileName = uniqueFileName(normalizeFileName(name, "nuevo.txt"));
+  const now = Date.now();
+  state.workspace.files[fileName] = {
+    type: "text",
+    content,
+    createdAt: now,
+    updatedAt: now,
+    x,
+    y
+  };
+  state.currentFile = fileName;
+  state.workspace.currentFile = fileName;
+  state.desktopSelectedFile = fileName;
+  renderWorkspaceViews();
+  return fileName;
+}
+
+function ensureFile(name) {
+  const fileName = normalizeFileName(name, "note.txt");
+  if (!state.workspace.files[fileName]) {
+    createFile(fileName);
+  }
+  return state.workspace.files[fileName];
+}
+
+function getFile(name) {
+  if (!state.workspace || !name) return null;
+  return state.workspace.files[name] || null;
+}
+
+function firstFileName() {
+  return Object.keys(state.workspace?.files || {})[0] || "note.txt";
+}
+
+function renameFile(from, to) {
+  const source = normalizeFileName(from, "");
+  const target = normalizeFileName(to, "");
+  if (!source || !target || !state.workspace.files[source]) return;
+  if (state.workspace.files[target]) {
+    renderStatus(`${target} ya existe`);
+    return;
+  }
+  state.workspace.files[target] = state.workspace.files[source];
+  delete state.workspace.files[source];
+  if (state.currentFile === source) state.currentFile = target;
+  if (state.workspace.currentFile === source) state.workspace.currentFile = target;
+  state.desktopSelectedFile = target;
+  renderWorkspaceViews();
+  markDirty(`renombrado ${target}`);
+}
+
+function deleteFile(name, ask = true) {
+  const fileName = normalizeFileName(name, "");
+  if (!fileName || !state.workspace.files[fileName]) return;
+  if (Object.keys(state.workspace.files).length <= 1) {
+    renderStatus("deja al menos un archivo");
+    return;
+  }
+  if (ask && !confirm(`Borrar ${fileName}?`)) return;
+  delete state.workspace.files[fileName];
+  state.currentFile = firstFileName();
+  state.workspace.currentFile = state.currentFile;
+  state.desktopSelectedFile = state.currentFile;
+  if (!els.desktopWindow.hidden) openDesktopFile(state.currentFile, false);
+  renderWorkspaceViews();
+  markDirty(`borrado ${fileName}`);
+}
+
+function uniqueFileName(baseName) {
+  const safeBase = normalizeFileName(baseName, "nuevo.txt");
+  if (!state.workspace || !state.workspace.files[safeBase]) return safeBase;
+
+  const base = withoutExtension(safeBase);
+  let index = 2;
+  let next = `${base}-${index}.txt`;
+  while (state.workspace.files[next]) {
+    index += 1;
+    next = `${base}-${index}.txt`;
+  }
+  return next;
+}
+
+function normalizeFileName(value, fallback) {
+  const raw = String(value || "").trim().replace(/^\.\/+/, "");
+  const cleaned = raw
+    .replace(/[\\/:*?"<>|]+/g, "-")
+    .replace(/\s+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 80);
+
+  if (!cleaned) return fallback;
+  return /\.[A-Za-z0-9]{1,8}$/.test(cleaned) ? cleaned : `${cleaned}.txt`;
+}
+
+function withoutExtension(name) {
+  return String(name).replace(/\.[^.]+$/, "");
 }
 
 async function deriveSession(pin, topic) {
@@ -659,7 +1307,7 @@ function moveCaret(delta) {
 
 function moveAndInsert(delta) {
   moveCaret(delta);
-  setMode("insert");
+  setVimMode("insert");
 }
 
 function openLineBelow() {
@@ -667,9 +1315,9 @@ function openLineBelow() {
   const pos = bounds.end;
   els.editor.value = `${els.editor.value.slice(0, pos)}\n${els.editor.value.slice(pos)}`;
   setCaret(pos + 1);
-  state.dirty = true;
-  setMode("insert");
-  scheduleLocalSave();
+  commitVimEditor();
+  markDirty("linea nueva");
+  setVimMode("insert");
 }
 
 function moveLine(delta) {
@@ -691,8 +1339,8 @@ function deleteChar() {
   if (pos >= text.length) return;
   els.editor.value = text.slice(0, pos) + text.slice(pos + 1);
   setCaret(pos);
-  state.dirty = true;
-  scheduleLocalSave();
+  commitVimEditor();
+  markDirty("char borrado");
 }
 
 function deleteLine() {
@@ -703,8 +1351,8 @@ function deleteLine() {
   state.yank = text.slice(bounds.start, end);
   els.editor.value = text.slice(0, bounds.start) + text.slice(end);
   setCaret(Math.min(bounds.start, els.editor.value.length));
-  state.dirty = true;
-  scheduleLocalSave();
+  commitVimEditor();
+  markDirty("linea borrada");
 }
 
 function yankLine() {
@@ -718,8 +1366,8 @@ function pasteYank() {
   const pos = els.editor.selectionStart;
   els.editor.value = els.editor.value.slice(0, pos) + state.yank + els.editor.value.slice(pos);
   setCaret(pos + state.yank.length);
-  state.dirty = true;
-  scheduleLocalSave();
+  commitVimEditor();
+  markDirty("pegado");
 }
 
 function twoKey(expected, action) {
@@ -755,10 +1403,13 @@ async function copyText(text) {
   }
 
   const previous = els.editor.value;
+  const wasHidden = els.editor.hidden;
+  els.editor.hidden = false;
   els.editor.value = text;
   els.editor.select();
   document.execCommand("copy");
   els.editor.value = previous;
+  els.editor.hidden = wasHidden;
 }
 
 function base64url(bytes) {

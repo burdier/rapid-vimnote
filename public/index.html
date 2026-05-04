@@ -22,6 +22,8 @@
           </div>
           <div class="top-actions">
             <div class="net" id="netState">offline-first</div>
+            <button class="mode-button" id="modeSwitchButton" type="button" hidden>Modo nerd</button>
+            <button class="mode-button" id="wallpaperButton" type="button" hidden>Fondo</button>
             <button class="share-button" id="shareButton" type="button" hidden>Compartir 5m</button>
           </div>
         </header>
@@ -59,10 +61,41 @@
               <pre id="shareText"></pre>
             </div>
 
-            <textarea id="editor" spellcheck="false" autocomplete="off" autocorrect="off" autocapitalize="off"></textarea>
+            <div class="normal-desktop" id="normalDesktop" hidden>
+              <div class="desktop-canvas" id="desktopCanvas"></div>
+              <section class="file-window" id="desktopWindow" hidden>
+                <header class="file-window-top">
+                  <strong id="desktopWindowTitle">note.txt</strong>
+                  <div>
+                    <button id="desktopShareButton" type="button">Compartir</button>
+                    <button id="desktopCloseButton" type="button">Cerrar</button>
+                  </div>
+                </header>
+                <textarea id="desktopEditor" spellcheck="false" autocomplete="off" autocorrect="off" autocapitalize="off"></textarea>
+              </section>
+            </div>
+
+            <div class="nerd-shell" id="nerdShell" hidden>
+              <div class="terminal-output" id="terminalOutput"></div>
+              <form class="terminal-form" id="terminalForm" autocomplete="off">
+                <span id="terminalPrompt">~/ $</span>
+                <input id="terminalInput" spellcheck="false" autocomplete="off">
+              </form>
+            </div>
+
+            <textarea id="editor" spellcheck="false" autocomplete="off" autocorrect="off" autocapitalize="off" hidden></textarea>
             <div class="command" id="commandBar" hidden>
               <span>:</span>
               <input id="commandInput" autocomplete="off" spellcheck="false">
+            </div>
+
+            <div class="context-menu" id="contextMenu" hidden>
+              <button type="button" data-action="new-file">Nuevo .txt</button>
+              <button type="button" data-action="open-file">Abrir</button>
+              <button type="button" data-action="share-file">Compartir...</button>
+              <button type="button" data-action="rename-file">Renombrar</button>
+              <button type="button" data-action="delete-file">Borrar</button>
+              <button type="button" data-action="wallpaper">Cambiar fondo</button>
             </div>
           </section>
         </div>
