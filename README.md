@@ -54,6 +54,8 @@ Para lograrlo, el share temporal guarda la llave del share en el servidor hasta 
 
 Si un link corto dice que no tiene llave temporal, fue creado antes de esta version o con cache vieja del navegador. Vuelve a compartir el archivo para generar un link corto nuevo.
 
+En movil, si el navegador no permite copiar automaticamente, la app abre el dialogo nativo de compartir o muestra el link para copiarlo manualmente.
+
 ## Comandos nerd
 
 - `ls`: lista archivos.

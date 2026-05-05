@@ -1090,6 +1090,7 @@ async function createPublicShare(ttlText, fileName = state.currentFile) {
   const raw = new Uint8Array(await crypto.subtle.exportKey("raw", shareKey));
   const shareKeyText = base64url(raw);
 
+  let data;
   try {
     const response = await api("/api/share", {
       method: "POST",
@@ -1102,15 +1103,47 @@ async function createPublicShare(ttlText, fileName = state.currentFile) {
       }
     });
 
-    const data = await response.json();
-    const link = `${location.origin}/${data.token}`;
-    await copyText(link);
-    const message = `archivo ${safeName} compartido, expira ${new Date(data.expiresAt).toLocaleTimeString()}`;
-    renderStatus(message);
-    if (state.uiMode === "nerd") writeTerminal(link);
+    data = await response.json();
+    if (!response.ok || !data.token) {
+      throw new Error(data.error || "share_failed");
+    }
   } catch {
     renderStatus("no pude crear share, red no disponible");
     if (state.uiMode === "nerd") writeTerminal("share: red no disponible");
+    return;
+  }
+
+  const link = `${location.origin}/${data.token}`;
+  await publishCreatedShareLink(link, safeName, data.expiresAt);
+}
+
+async function publishCreatedShareLink(link, fileName, expiresAt) {
+  const expires = new Date(expiresAt).toLocaleTimeString();
+  const message = `archivo ${fileName} compartido, expira ${expires}`;
+
+  if (state.uiMode === "nerd") writeTerminal(link);
+
+  try {
+    if (navigator.share) {
+      await navigator.share({
+        title: "Rapid Vimnote",
+        text: `Archivo compartido: ${fileName}`,
+        url: link
+      });
+      renderStatus(`${message}. link enviado`);
+      return;
+    }
+  } catch {
+    // Continue to clipboard/manual fallback.
+  }
+
+  try {
+    await copyText(link);
+    renderStatus(`${message}. link copiado`);
+    return;
+  } catch {
+    renderStatus(`${message}. copia manual: ${link}`);
+    prompt("Copia este link", link);
   }
 }
 
