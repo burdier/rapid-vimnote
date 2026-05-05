@@ -1163,7 +1163,7 @@ async function openShare(options = {}) {
 
     keyText = keyText || data.shareKey || "";
     if (!keyText) {
-      els.shareText.textContent = "link incompleto";
+      els.shareText.textContent = "este share no tiene llave temporal. Vuelve a compartir el archivo para generar un link corto nuevo.";
       return true;
     }
 

@@ -1,4 +1,4 @@
-const CACHE_NAME = "rapid-vimnote-shell-v1";
+const CACHE_NAME = "rapid-vimnote-shell-v2";
 const SHELL = [
   "/",
   "/index.html",
@@ -27,23 +27,19 @@ self.addEventListener("fetch", (event) => {
   const request = event.request;
   const url = new URL(request.url);
 
-  if (url.pathname.startsWith("/api/")) {
+  if (request.method !== "GET" || url.pathname.startsWith("/api/")) {
     return;
   }
 
   event.respondWith(
-    caches.match(request).then((cached) => {
-      if (cached) return cached;
-
-      return fetch(request)
-        .then((response) => {
-          if (request.method === "GET" && response.ok) {
-            const copy = response.clone();
-            caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
-          }
-          return response;
-        })
-        .catch(() => caches.match("/index.html"));
-    })
+    fetch(request)
+      .then((response) => {
+        if (response.ok) {
+          const copy = response.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
+        }
+        return response;
+      })
+      .catch(() => caches.match(request).then((cached) => cached || caches.match("/index.html")))
   );
 });

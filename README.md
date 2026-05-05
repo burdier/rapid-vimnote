@@ -52,6 +52,8 @@ https://notas.dev/ab30d
 
 Para lograrlo, el share temporal guarda la llave del share en el servidor hasta que expire. El cuaderno privado no cambia: sigue cifrado con `PIN + cuaderno` y el PIN nunca llega al backend.
 
+Si un link corto dice que no tiene llave temporal, fue creado antes de esta version o con cache vieja del navegador. Vuelve a compartir el archivo para generar un link corto nuevo.
+
 ## Comandos nerd
 
 - `ls`: lista archivos.
