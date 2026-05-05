@@ -9,7 +9,7 @@ Nota temporal offline-first con sensacion de terminal/vim. Esta pensada para abr
 - Cifrado cliente: WebCrypto AES-GCM, derivado desde `pin + topic`.
 - Backend: Cloudflare Worker.
 - Base de datos: Cloudflare D1.
-- Shares publicos: snapshot cifrado con llave en el fragmento `#`, expiracion corta en servidor.
+- Shares publicos: snapshot cifrado de un archivo con expiracion corta en servidor.
 
 ## Tema visual
 
@@ -30,6 +30,8 @@ Rapid Vimnote tiene dos modos para el mismo cuaderno cifrado:
 
 El boton `Modo nerd` / `Modo normal` cambia entre ambos sin cambiar de cuaderno.
 
+En movil, tocar un documento lo abre y toque prolongado abre el menu contextual. En modo nerd hay botones rapidos para `ls`, `cat`, `touch`, `vim`, `share` y `sync`.
+
 ## Links faciles
 
 Cada cuaderno usa una URL corta basada en su nombre. Si tu dominio es `https://notas.dev` y el cuaderno se llama `ideas`, la URL queda:
@@ -40,9 +42,9 @@ https://notas.dev/ideas
 
 Esa URL solo prellena el cuaderno. Para abrirlo desde otro navegador todavia necesitas el mismo PIN.
 
-El boton `Link` copia esa URL corta.
+El boton `Cuaderno` copia esa URL corta. Ese link abre el espacio/cuaderno, pero sigue pidiendo PIN.
 
-Los links publicos de `Compartir` ahora tambien son cortos:
+El boton `Archivo` comparte solo el contenido del archivo actual. Los links publicos de archivo ahora tambien son cortos:
 
 ```text
 https://notas.dev/ab30d
@@ -78,7 +80,7 @@ Para lograrlo, el share temporal guarda la llave del share en el servidor hasta 
 - `/texto`: buscar texto.
 - `dd`, `yy`, `p`, `h`, `j`, `k`, `l`, `0`, `$`, `x`: gestos basicos tipo vim.
 
-En modo normal tambien hay un boton visible `Compartir 5m` en la barra superior cuando el cuaderno esta abierto.
+En modo normal tambien hay un boton visible `Archivo` en la barra superior para compartir solo el archivo actual por 5 minutos.
 
 ## Desarrollo
 

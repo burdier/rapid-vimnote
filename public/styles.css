@@ -32,7 +32,6 @@ body {
 
 body {
   overflow: hidden;
-  touch-action: manipulation;
 }
 
 button,
@@ -525,6 +524,8 @@ button:hover {
   position: absolute;
   inset: 0;
   overflow: hidden;
+  touch-action: manipulation;
+  -webkit-touch-callout: none;
 }
 
 .file-icon {
@@ -540,6 +541,10 @@ button:hover {
   background: transparent;
   color: var(--ink);
   text-align: center;
+  touch-action: manipulation;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
 }
 
 .file-icon:hover,
@@ -632,7 +637,7 @@ button:hover {
 
 .nerd-shell {
   display: grid;
-  grid-template-rows: 1fr auto;
+  grid-template-rows: 1fr auto auto;
   background: #070908;
   color: #d9f5d6;
 }
@@ -657,6 +662,29 @@ button:hover {
   padding: 7px 12px;
   border-top: 1px solid #223226;
   background: #0b100d;
+}
+
+.terminal-actions {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  padding: 7px 10px;
+  border-top: 1px solid #172219;
+  background: #090d0b;
+  scrollbar-width: none;
+}
+
+.terminal-actions::-webkit-scrollbar {
+  display: none;
+}
+
+.terminal-actions button {
+  flex: 0 0 auto;
+  min-height: 34px;
+  padding: 0 10px;
+  border-color: #253827;
+  background: #101a13;
+  color: #b7e9ad;
 }
 
 #terminalPrompt {
@@ -832,6 +860,10 @@ button:hover {
     gap: 8px;
     min-height: 42px;
     padding: 0 14px;
+  }
+
+  .terminal-actions {
+    padding: 8px 14px;
   }
 
   #terminalPrompt {

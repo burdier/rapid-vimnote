@@ -36,6 +36,7 @@ const els = {
   desktopCloseButton: $("desktopCloseButton"),
   nerdShell: $("nerdShell"),
   terminalOutput: $("terminalOutput"),
+  terminalActions: $("terminalActions"),
   terminalForm: $("terminalForm"),
   terminalPrompt: $("terminalPrompt"),
   terminalInput: $("terminalInput"),
@@ -57,6 +58,10 @@ const state = {
   desktopSelectedFile: "",
   contextTargetFile: "",
   contextPoint: { x: 28, y: 28 },
+  touchTimer: 0,
+  touchedFile: "",
+  touchMoved: false,
+  suppressNextDesktopClick: false,
   editorOpen: false,
   yank: ""
 };
@@ -154,6 +159,12 @@ function wireEvents() {
     await runTerminalCommand(raw);
   });
 
+  els.terminalActions.addEventListener("click", async (event) => {
+    const button = event.target.closest("[data-command]");
+    if (!button) return;
+    await runTerminalQuickCommand(button.dataset.command);
+  });
+
   els.desktopCanvas.addEventListener("contextmenu", (event) => {
     event.preventDefault();
     const fileEl = event.target.closest("[data-file]");
@@ -163,20 +174,57 @@ function wireEvents() {
   });
 
   els.desktopCanvas.addEventListener("click", (event) => {
+    if (state.suppressNextDesktopClick) {
+      event.preventDefault();
+      state.suppressNextDesktopClick = false;
+      return;
+    }
+
     const fileEl = event.target.closest("[data-file]");
     if (!fileEl) {
       state.desktopSelectedFile = "";
       renderDesktop();
       return;
     }
-    state.desktopSelectedFile = fileEl.dataset.file;
-    renderDesktop();
+    openDesktopFile(fileEl.dataset.file);
   });
 
-  els.desktopCanvas.addEventListener("dblclick", (event) => {
+  els.desktopCanvas.addEventListener("touchstart", (event) => {
+    const touch = event.touches[0];
+    if (!touch) return;
     const fileEl = event.target.closest("[data-file]");
-    if (fileEl) openDesktopFile(fileEl.dataset.file);
+    state.touchedFile = fileEl ? fileEl.dataset.file : "";
+    state.touchMoved = false;
+    state.contextTargetFile = state.touchedFile;
+    state.contextPoint = desktopPointFromTouch(touch);
+    clearTimeout(state.touchTimer);
+    state.touchTimer = setTimeout(() => {
+      state.suppressNextDesktopClick = true;
+      if (navigator.vibrate) navigator.vibrate(18);
+      showContextMenu(touch.clientX, touch.clientY, Boolean(state.contextTargetFile));
+    }, 520);
+  }, { passive: true });
+
+  els.desktopCanvas.addEventListener("touchend", () => {
+    clearTimeout(state.touchTimer);
+    if (state.touchedFile && !state.touchMoved && !state.suppressNextDesktopClick) {
+      openDesktopFile(state.touchedFile, false);
+      state.suppressNextDesktopClick = true;
+      setTimeout(() => {
+        state.suppressNextDesktopClick = false;
+      }, 700);
+    } else if (state.suppressNextDesktopClick) {
+      setTimeout(() => {
+        state.suppressNextDesktopClick = false;
+      }, 700);
+    }
+    state.touchedFile = "";
   });
+
+  els.desktopCanvas.addEventListener("touchmove", () => {
+    state.touchMoved = true;
+    clearTimeout(state.touchTimer);
+  }, { passive: true });
 
   els.contextMenu.addEventListener("click", async (event) => {
     const button = event.target.closest("[data-action]");
@@ -336,6 +384,7 @@ async function syncToRemote(force) {
 
 function createWorkspace(content = "") {
   const now = Date.now();
+  const existingCount = Object.keys(state.workspace?.files || {}).length;
   return {
     marker: WORKSPACE_MARKER,
     version: 2,
@@ -347,8 +396,7 @@ function createWorkspace(content = "") {
         content,
         createdAt: now,
         updatedAt: now,
-        x: 28,
-        y: 28
+        ...nextFilePosition(existingCount)
       }
     }
   };
@@ -553,7 +601,8 @@ function renderModeButton() {
 function renderResponsiveLabels() {
   renderModeButton();
   const isCompact = window.matchMedia("(max-width: 760px)").matches;
-  els.shareButton.textContent = isCompact ? "Share" : "Compartir 5m";
+  els.topicLinkButton.textContent = isCompact ? "Cuaderno" : "Link cuaderno";
+  els.shareButton.textContent = isCompact ? "Archivo" : "Share archivo 5m";
 }
 
 function renderDesktop() {
@@ -567,8 +616,11 @@ function renderDesktop() {
     icon.className = "file-icon";
     if (name === state.desktopSelectedFile) icon.classList.add("selected");
     icon.dataset.file = name;
-    icon.style.left = `${Math.max(8, file.x || 28)}px`;
-    icon.style.top = `${Math.max(8, file.y || 28)}px`;
+    const position = clampFilePosition(file.x || 28, file.y || 28);
+    file.x = position.x;
+    file.y = position.y;
+    icon.style.left = `${position.x}px`;
+    icon.style.top = `${position.y}px`;
     icon.innerHTML = `<span class="file-paper">txt</span><span>${escapeHtml(name)}</span>`;
     els.desktopCanvas.append(icon);
   }
@@ -671,6 +723,48 @@ function desktopPointFromEvent(event) {
   };
 }
 
+function desktopPointFromTouch(touch) {
+  const rect = els.desktopCanvas.getBoundingClientRect();
+  return {
+    x: Math.round(touch.clientX - rect.left),
+    y: Math.round(touch.clientY - rect.top)
+  };
+}
+
+async function runTerminalQuickCommand(command) {
+  const current = state.currentFile || firstFileName();
+
+  if (command === "ls" || command === "sync") {
+    await runTerminalCommand(command);
+    return;
+  }
+
+  if (command === "cat") {
+    els.terminalInput.value = `cat ${current}`;
+    els.terminalInput.focus();
+    return;
+  }
+
+  if (command === "vim") {
+    els.terminalInput.value = `vim ${current}`;
+    els.terminalInput.focus();
+    return;
+  }
+
+  if (command === "share") {
+    els.terminalInput.value = `share 5m ${current}`;
+    els.terminalInput.focus();
+    return;
+  }
+
+  if (command === "touch") {
+    const name = prompt("Nombre del archivo", nextUntitledFileName()) || "";
+    if (!name.trim()) return;
+    await runTerminalCommand(`touch ${name}`);
+    renderStatus(`creado ${state.currentFile}`);
+  }
+}
+
 function cycleWallpaper() {
   if (!state.workspace) return;
   const current = WALLPAPERS.indexOf(state.workspace.wallpaper);
@@ -719,11 +813,14 @@ async function runTerminalCommand(raw) {
       break;
     case "touch":
       if (!args[1]) return writeTerminal("touch: falta archivo");
-      ensureFile(args[1]).updatedAt = Date.now();
+      ensureFile(args[1]);
       state.currentFile = normalizeFileName(args[1], "nuevo.txt");
       state.workspace.currentFile = state.currentFile;
+      state.desktopSelectedFile = state.currentFile;
+      state.workspace.files[state.currentFile].updatedAt = Date.now();
       renderWorkspaceViews();
       markDirty(`touch ${state.currentFile}`);
+      writeTerminal(state.currentFile);
       break;
     case "vim":
     case "vi":
@@ -1008,7 +1105,7 @@ async function createPublicShare(ttlText, fileName = state.currentFile) {
     const data = await response.json();
     const link = `${location.origin}/${data.token}`;
     await copyText(link);
-    const message = `share ${safeName} copiado, expira ${new Date(data.expiresAt).toLocaleTimeString()}`;
+    const message = `archivo ${safeName} compartido, expira ${new Date(data.expiresAt).toLocaleTimeString()}`;
     renderStatus(message);
     if (state.uiMode === "nerd") writeTerminal(link);
   } catch {
@@ -1074,7 +1171,7 @@ async function openShare(options = {}) {
     const key = await crypto.subtle.importKey("raw", keyBytes, { name: "AES-GCM" }, false, ["decrypt"]);
     const text = await decryptText(key, data.iv, data.bodyCipher);
     els.shareText.textContent = text || "(vacio)";
-    els.shareMeta.textContent = `public share | expira ${new Date(data.expiresAt).toLocaleString()}`;
+    els.shareMeta.textContent = `archivo compartido | expira ${new Date(data.expiresAt).toLocaleString()}`;
     return true;
   } catch {
     if (options.silentNotFound) {
@@ -1222,20 +1319,21 @@ function setShortTopicPath(topic) {
 async function copyShortTopicLink() {
   const link = shortTopicLink();
   await copyText(link);
-  renderStatus(`link copiado: ${link}`);
+  renderStatus(`link de cuaderno copiado: ${link}`);
 }
 
 function createFile(name, content = "", x = 28, y = 28) {
   if (!state.workspace) state.workspace = createWorkspace();
   const fileName = uniqueFileName(normalizeFileName(name, "nuevo.txt"));
   const now = Date.now();
+  const position = clampFilePosition(x, y);
   state.workspace.files[fileName] = {
     type: "text",
     content,
     createdAt: now,
     updatedAt: now,
-    x,
-    y
+    x: position.x,
+    y: position.y
   };
   state.currentFile = fileName;
   state.workspace.currentFile = fileName;
@@ -1247,7 +1345,8 @@ function createFile(name, content = "", x = 28, y = 28) {
 function ensureFile(name) {
   const fileName = normalizeFileName(name, "note.txt");
   if (!state.workspace.files[fileName]) {
-    createFile(fileName);
+    const position = nextFilePosition(Object.keys(state.workspace.files).length);
+    createFile(fileName, "", position.x, position.y);
   }
   return state.workspace.files[fileName];
 }
@@ -1323,6 +1422,33 @@ function normalizeFileName(value, fallback) {
 
 function withoutExtension(name) {
   return String(name).replace(/\.[^.]+$/, "");
+}
+
+function nextUntitledFileName() {
+  let index = Object.keys(state.workspace?.files || {}).length + 1;
+  let name = `file-${index}.txt`;
+  while (state.workspace?.files[name]) {
+    index += 1;
+    name = `file-${index}.txt`;
+  }
+  return name;
+}
+
+function nextFilePosition(index) {
+  const rect = els.desktopCanvas?.getBoundingClientRect();
+  const width = rect?.width || window.innerWidth;
+  const columns = Math.max(1, Math.floor((width - 20) / 92));
+  return clampFilePosition(18 + (index % columns) * 88, 22 + Math.floor(index / columns) * 96);
+}
+
+function clampFilePosition(x, y) {
+  const rect = els.desktopCanvas?.getBoundingClientRect();
+  const width = Math.max(120, rect?.width || window.innerWidth);
+  const height = Math.max(160, rect?.height || window.innerHeight);
+  return {
+    x: Math.max(8, Math.min(Math.round(x), width - 86)),
+    y: Math.max(8, Math.min(Math.round(y), height - 98))
+  };
 }
 
 async function deriveSession(pin, topic) {

@@ -22,10 +22,10 @@
           </div>
           <div class="top-actions">
             <div class="net" id="netState">offline-first</div>
-            <button class="mode-button" id="topicLinkButton" type="button" hidden>Link</button>
+            <button class="mode-button" id="topicLinkButton" type="button" hidden>Cuaderno</button>
             <button class="mode-button" id="modeSwitchButton" type="button" hidden>Nerd</button>
             <button class="mode-button" id="wallpaperButton" type="button" hidden>Fondo</button>
-            <button class="share-button" id="shareButton" type="button" hidden>Share</button>
+            <button class="share-button" id="shareButton" type="button" hidden>Archivo</button>
           </div>
         </header>
 
@@ -58,7 +58,7 @@
             </div>
 
             <div class="share-view" id="shareView" hidden>
-              <div class="share-meta" id="shareMeta">public share</div>
+              <div class="share-meta" id="shareMeta">archivo compartido</div>
               <pre id="shareText"></pre>
             </div>
 
@@ -68,7 +68,7 @@
                 <header class="file-window-top">
                   <strong id="desktopWindowTitle">note.txt</strong>
                   <div>
-                    <button id="desktopShareButton" type="button">Compartir</button>
+                    <button id="desktopShareButton" type="button">Compartir archivo</button>
                     <button id="desktopCloseButton" type="button">Cerrar</button>
                   </div>
                 </header>
@@ -78,6 +78,14 @@
 
             <div class="nerd-shell" id="nerdShell" hidden>
               <div class="terminal-output" id="terminalOutput"></div>
+              <div class="terminal-actions" id="terminalActions">
+                <button type="button" data-command="ls">ls</button>
+                <button type="button" data-command="cat">cat</button>
+                <button type="button" data-command="touch">touch</button>
+                <button type="button" data-command="vim">vim</button>
+                <button type="button" data-command="share">share</button>
+                <button type="button" data-command="sync">sync</button>
+              </div>
               <form class="terminal-form" id="terminalForm" autocomplete="off">
                 <span id="terminalPrompt">~/ $</span>
                 <input id="terminalInput" spellcheck="false" autocomplete="off">
@@ -93,7 +101,7 @@
             <div class="context-menu" id="contextMenu" hidden>
               <button type="button" data-action="new-file">Nuevo .txt</button>
               <button type="button" data-action="open-file">Abrir</button>
-              <button type="button" data-action="share-file">Compartir...</button>
+              <button type="button" data-action="share-file">Compartir archivo...</button>
               <button type="button" data-action="rename-file">Renombrar</button>
               <button type="button" data-action="delete-file">Borrar</button>
               <button type="button" data-action="wallpaper">Cambiar fondo</button>
