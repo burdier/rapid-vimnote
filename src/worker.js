@@ -119,25 +119,35 @@ async function createShare(request, env) {
   assertId(body.topicId, "topicId");
   assertCipher(body.bodyCipher, "bodyCipher", SHARE_LIMIT);
   assertId(body.iv, "iv");
+  if (body.shareKey !== undefined) {
+    assertShareKey(body.shareKey);
+  }
 
   const ttlSeconds = clampTtl(body.ttlSeconds);
   const now = Date.now();
   const expiresAt = now + ttlSeconds * 1000;
-  const token = randomToken(6);
+  const topicOrKey = body.shareKey ? `key:${body.shareKey}` : body.topicId;
 
   await cleanupExpiredShares(env, now);
 
-  await env.DB.prepare(
-    `INSERT INTO shares (token, topic_id, body_cipher, iv, expires_at, created_at)
-     VALUES (?, ?, ?, ?, ?, ?)`
-  ).bind(token, body.topicId, body.bodyCipher, body.iv, expiresAt, now).run();
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    const token = randomCode(5);
+    const result = await env.DB.prepare(
+      `INSERT OR IGNORE INTO shares (token, topic_id, body_cipher, iv, expires_at, created_at)
+       VALUES (?, ?, ?, ?, ?, ?)`
+    ).bind(token, topicOrKey, body.bodyCipher, body.iv, expiresAt, now).run();
 
-  return json({ token, expiresAt, ttlSeconds });
+    if ((result.meta?.changes || 0) > 0) {
+      return json({ token, expiresAt, ttlSeconds });
+    }
+  }
+
+  throw httpError("token_collision", 503);
 }
 
 async function getShare(url, env) {
   const token = url.pathname.slice("/api/share/".length);
-  assertId(token, "token");
+  assertToken(token);
 
   const now = Date.now();
   const row = await env.DB.prepare(
@@ -157,6 +167,7 @@ async function getShare(url, env) {
     token: row.token,
     bodyCipher: row.body_cipher,
     iv: row.iv,
+    shareKey: shareKeyFromTopic(row.topic_id),
     expiresAt: row.expires_at,
     createdAt: row.created_at
   });
@@ -191,6 +202,18 @@ function assertId(value, field) {
   }
 }
 
+function assertToken(value) {
+  if (typeof value !== "string" || !/^[A-Za-z0-9_-]{4,128}$/.test(value)) {
+    throw httpError("invalid_token", 400);
+  }
+}
+
+function assertShareKey(value) {
+  if (typeof value !== "string" || !/^[A-Za-z0-9_-]{16,128}$/.test(value)) {
+    throw httpError("invalid_shareKey", 400);
+  }
+}
+
 function assertCipher(value, field, limit) {
   if (typeof value !== "string" || value.length < 1 || value.length > limit) {
     throw httpError(`invalid_${field}`, 400);
@@ -199,6 +222,24 @@ function assertCipher(value, field, limit) {
   if (!/^[A-Za-z0-9_-]+$/.test(value)) {
     throw httpError(`invalid_${field}`, 400);
   }
+}
+
+function shareKeyFromTopic(value) {
+  if (typeof value === "string" && value.startsWith("key:")) {
+    return value.slice(4);
+  }
+  return "";
+}
+
+function randomCode(size) {
+  const alphabet = "abcdefghjkmnpqrstuvwxyz23456789";
+  const bytes = new Uint8Array(size);
+  crypto.getRandomValues(bytes);
+  let token = "";
+  for (const byte of bytes) {
+    token += alphabet[byte % alphabet.length];
+  }
+  return token;
 }
 
 function randomToken(size) {

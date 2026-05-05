@@ -69,8 +69,17 @@ async function init() {
   renderTopics();
   registerServiceWorker();
 
+  if (!ensureSecureCrypto()) {
+    return;
+  }
+
   if (location.pathname.startsWith("/s/")) {
     await openShare();
+    return;
+  }
+
+  const shortShareToken = shortTokenFromPath();
+  if (shortShareToken && await openShare({ token: shortShareToken, silentNotFound: true })) {
     return;
   }
 
@@ -84,6 +93,7 @@ async function init() {
 function wireEvents() {
   window.addEventListener("online", updateNetwork);
   window.addEventListener("offline", updateNetwork);
+  window.addEventListener("resize", renderResponsiveLabels);
   window.addEventListener("click", (event) => {
     if (!event.target.closest(".context-menu")) hideContextMenu();
   });
@@ -93,6 +103,10 @@ function wireEvents() {
 
   els.loginForm.addEventListener("submit", async (event) => {
     event.preventDefault();
+    if (!ensureSecureCrypto()) {
+      return;
+    }
+
     const pin = els.pinInput.value.trim();
     const topic = normalizeTopic(els.topicInput.value);
     if (!pin || !topic) {
@@ -494,7 +508,7 @@ function switchUiMode(mode) {
 function applyUiMode(mode) {
   hideContextMenu();
   closeCommand();
-  els.modeSwitchButton.textContent = mode === "nerd" ? "Modo normal" : "Modo nerd";
+  renderResponsiveLabels();
   els.wallpaperButton.hidden = !state.key || mode === "nerd";
 
   if (!state.key) {
@@ -525,6 +539,21 @@ function applyUiMode(mode) {
   els.editor.hidden = true;
   setVimMode("desktop");
   renderDesktop();
+}
+
+function renderModeButton() {
+  const isCompact = window.matchMedia("(max-width: 760px)").matches;
+  if (state.uiMode === "nerd") {
+    els.modeSwitchButton.textContent = isCompact ? "Normal" : "Modo normal";
+  } else {
+    els.modeSwitchButton.textContent = isCompact ? "Nerd" : "Modo nerd";
+  }
+}
+
+function renderResponsiveLabels() {
+  renderModeButton();
+  const isCompact = window.matchMedia("(max-width: 760px)").matches;
+  els.shareButton.textContent = isCompact ? "Share" : "Compartir 5m";
 }
 
 function renderDesktop() {
@@ -961,6 +990,8 @@ async function createPublicShare(ttlText, fileName = state.currentFile) {
   const ttlSeconds = parseTtl(ttlText);
   const shareKey = await crypto.subtle.generateKey({ name: "AES-GCM", length: 256 }, true, ["encrypt", "decrypt"]);
   const encrypted = await encryptText(shareKey, file.content);
+  const raw = new Uint8Array(await crypto.subtle.exportKey("raw", shareKey));
+  const shareKeyText = base64url(raw);
 
   try {
     const response = await api("/api/share", {
@@ -969,13 +1000,13 @@ async function createPublicShare(ttlText, fileName = state.currentFile) {
         topicId: state.topicId,
         bodyCipher: encrypted.bodyCipher,
         iv: encrypted.iv,
+        shareKey: shareKeyText,
         ttlSeconds
       }
     });
 
     const data = await response.json();
-    const raw = new Uint8Array(await crypto.subtle.exportKey("raw", shareKey));
-    const link = `${location.origin}/s/${data.token}#${base64url(raw)}`;
+    const link = `${location.origin}/${data.token}`;
     await copyText(link);
     const message = `share ${safeName} copiado, expira ${new Date(data.expiresAt).toLocaleTimeString()}`;
     renderStatus(message);
@@ -1000,7 +1031,7 @@ function parseTtl(text) {
   return Math.min(3600, Math.max(30, seconds));
 }
 
-async function openShare() {
+async function openShare(options = {}) {
   els.boot.hidden = true;
   els.editor.hidden = true;
   els.modeSwitchButton.hidden = true;
@@ -1012,30 +1043,46 @@ async function openShare() {
   els.shareView.hidden = false;
   setVimMode("share");
 
-  const token = location.pathname.split("/").filter(Boolean).pop();
-  const keyText = location.hash.slice(1);
+  const token = options.token || location.pathname.split("/").filter(Boolean).pop();
+  let keyText = location.hash.slice(1);
 
-  if (!token || !keyText) {
+  if (!token) {
     els.shareText.textContent = "link incompleto";
-    return;
+    return true;
   }
 
   try {
-    const keyBytes = fromBase64url(keyText);
-    const key = await crypto.subtle.importKey("raw", keyBytes, { name: "AES-GCM" }, false, ["decrypt"]);
     const response = await fetch(`/api/share/${token}`, { headers: { accept: "application/json" } });
     const data = await response.json();
 
     if (!response.ok) {
+      if (options.silentNotFound && response.status === 404) {
+        resetShareShellForLogin();
+        return false;
+      }
       els.shareText.textContent = data.error === "expired" ? "share expirado" : "share no encontrado";
-      return;
+      return true;
     }
 
+    keyText = keyText || data.shareKey || "";
+    if (!keyText) {
+      els.shareText.textContent = "link incompleto";
+      return true;
+    }
+
+    const keyBytes = fromBase64url(keyText);
+    const key = await crypto.subtle.importKey("raw", keyBytes, { name: "AES-GCM" }, false, ["decrypt"]);
     const text = await decryptText(key, data.iv, data.bodyCipher);
     els.shareText.textContent = text || "(vacio)";
     els.shareMeta.textContent = `public share | expira ${new Date(data.expiresAt).toLocaleString()}`;
+    return true;
   } catch {
+    if (options.silentNotFound) {
+      resetShareShellForLogin();
+      return false;
+    }
     els.shareText.textContent = "no pude abrir este share";
+    return true;
   }
 }
 
@@ -1100,6 +1147,36 @@ function flash(message) {
   els.message.textContent = message;
 }
 
+function resetShareShellForLogin() {
+  els.shareView.hidden = true;
+  els.boot.hidden = false;
+  els.editor.hidden = true;
+  els.modeSwitchButton.hidden = true;
+  els.topicLinkButton.hidden = true;
+  els.wallpaperButton.hidden = true;
+  els.shareButton.hidden = true;
+  els.normalDesktop.hidden = true;
+  els.nerdShell.hidden = true;
+  setVimMode("locked");
+}
+
+function ensureSecureCrypto() {
+  if (globalThis.crypto && globalThis.crypto.subtle) {
+    return true;
+  }
+
+  const isLocalhost = ["localhost", "127.0.0.1", "::1"].includes(location.hostname);
+  if (location.protocol === "http:" && !isLocalhost) {
+    location.replace(`https://${location.host}${location.pathname}${location.search}${location.hash}`);
+    return false;
+  }
+
+  flash("WebCrypto no esta disponible. Abre la app con HTTPS o localhost.");
+  const submit = els.loginForm.querySelector("button[type='submit']");
+  if (submit) submit.disabled = true;
+  return false;
+}
+
 function topicFromPath() {
   const parts = location.pathname.split("/").filter(Boolean).map((part) => decodeURIComponent(part));
   if (!parts.length) return "";
@@ -1120,6 +1197,14 @@ function topicFromPath() {
 
   if (reserved.has(parts[0])) return "";
   return normalizeTopic(parts[0]);
+}
+
+function shortTokenFromPath() {
+  const parts = location.pathname.split("/").filter(Boolean);
+  if (parts.length !== 1) return "";
+  const segment = decodeURIComponent(parts[0]);
+  if (/^[a-z2-9]{5}$/.test(segment)) return segment;
+  return "";
 }
 
 function shortTopicLink(topic = state.topic) {

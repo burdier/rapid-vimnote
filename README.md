@@ -40,7 +40,15 @@ https://notas.dev/ideas
 
 Esa URL solo prellena el cuaderno. Para abrirlo desde otro navegador todavia necesitas el mismo PIN.
 
-El boton `Link` copia esa URL corta. Los links publicos de `Compartir` siguen incluyendo una llave larga despues de `#` porque esa parte cifra el contenido compartido.
+El boton `Link` copia esa URL corta.
+
+Los links publicos de `Compartir` ahora tambien son cortos:
+
+```text
+https://notas.dev/ab30d
+```
+
+Para lograrlo, el share temporal guarda la llave del share en el servidor hasta que expire. El cuaderno privado no cambia: sigue cifrado con `PIN + cuaderno` y el PIN nunca llega al backend.
 
 ## Comandos nerd
 

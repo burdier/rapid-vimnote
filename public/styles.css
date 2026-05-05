@@ -32,6 +32,7 @@ body {
 
 body {
   overflow: hidden;
+  touch-action: manipulation;
 }
 
 button,
@@ -41,8 +42,8 @@ textarea {
 }
 
 .shell {
-  min-height: 100vh;
-  padding: 18px;
+  min-height: 100dvh;
+  padding: 0;
   background:
     linear-gradient(135deg, rgba(209, 176, 111, 0.07), transparent 32%),
     linear-gradient(315deg, rgba(111, 39, 50, 0.13), transparent 44%),
@@ -53,11 +54,11 @@ textarea {
   position: relative;
   display: grid;
   grid-template-rows: auto 1fr auto;
-  width: min(1180px, 100%);
-  height: calc(100vh - 36px);
+  width: 100%;
+  height: 100dvh;
   margin: 0 auto;
-  border: 1px solid var(--line);
-  border-radius: 8px;
+  border: 0;
+  border-radius: 0;
   background: var(--paper);
   box-shadow: 0 22px 68px var(--shadow);
   overflow: hidden;
@@ -75,6 +76,13 @@ textarea {
   background:
     linear-gradient(45deg, transparent 46%, var(--bronze) 48%, transparent 50%),
     linear-gradient(-45deg, transparent 46%, var(--bronze) 48%, transparent 50%);
+}
+
+@media (max-width: 760px) {
+  .terminal::before,
+  .terminal::after {
+    display: none;
+  }
 }
 
 .terminal::before {
@@ -99,14 +107,14 @@ textarea {
 }
 
 .topbar {
-  grid-template-columns: auto 1fr auto;
-  gap: 14px;
-  padding: 0 16px;
+  grid-template-columns: 1fr;
+  gap: 8px;
+  padding: 9px 10px;
   border-bottom: 1px solid var(--line);
 }
 
 .traffic {
-  display: flex;
+  display: none;
   align-items: center;
 }
 
@@ -133,6 +141,7 @@ textarea {
   white-space: nowrap;
   text-overflow: ellipsis;
   color: var(--ink);
+  font-size: 13px;
 }
 
 .promptline .muted {
@@ -151,6 +160,7 @@ textarea {
 }
 
 .net {
+  display: none;
   color: var(--muted);
   font-size: 12px;
   white-space: nowrap;
@@ -159,14 +169,20 @@ textarea {
 .top-actions {
   display: flex;
   align-items: center;
-  justify-content: flex-end;
-  gap: 10px;
+  justify-content: flex-start;
+  gap: 6px;
   min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.top-actions::-webkit-scrollbar {
+  display: none;
 }
 
 .share-button {
-  min-height: 32px;
-  padding: 0 12px;
+  min-height: 34px;
+  padding: 0 10px;
   border-color: #9c754d;
   background: #423124;
   color: var(--gold);
@@ -178,8 +194,8 @@ textarea {
 }
 
 .mode-button {
-  min-height: 32px;
-  padding: 0 11px;
+  min-height: 34px;
+  padding: 0 9px;
   border-color: var(--line-soft);
   background: #2b2119;
   color: var(--ink);
@@ -195,10 +211,11 @@ textarea {
   z-index: 2;
   min-height: 0;
   display: grid;
-  grid-template-columns: 230px 1fr;
+  grid-template-columns: 1fr;
 }
 
 .pane {
+  display: none;
   min-width: 0;
   border-right: 1px solid var(--line-soft);
   background:
@@ -264,7 +281,7 @@ textarea {
 .editor-wrap::before {
   content: "";
   position: absolute;
-  inset: 12px;
+  inset: 8px;
   border: 1px solid rgba(184, 135, 85, 0.2);
   border-radius: 8px;
   pointer-events: none;
@@ -280,7 +297,7 @@ textarea {
   resize: none;
   border: 0;
   outline: 0;
-  padding: 24px;
+  padding: 16px;
   color: var(--ink);
   background:
     linear-gradient(rgba(241, 231, 210, 0.035) 50%, transparent 50%),
@@ -288,7 +305,7 @@ textarea {
   background-size: 100% 34px;
   caret-color: var(--gold);
   line-height: 1.62;
-  font-size: 15px;
+  font-size: 14px;
   tab-size: 2;
 }
 
@@ -307,7 +324,7 @@ textarea {
   display: grid;
   place-items: center;
   background: rgba(23, 19, 15, 0.94);
-  padding: 18px;
+  padding: 14px;
 }
 
 .boot[hidden] {
@@ -315,7 +332,7 @@ textarea {
 }
 
 .login {
-  width: min(430px, 100%);
+  width: min(430px, calc(100vw - 28px));
   display: grid;
   gap: 15px;
   border: 1px solid var(--line);
@@ -323,7 +340,7 @@ textarea {
   background:
     linear-gradient(180deg, rgba(209, 176, 111, 0.06), transparent 48%),
     var(--panel);
-  padding: 20px;
+  padding: 16px;
   box-shadow: 0 18px 52px rgba(0, 0, 0, 0.3);
 }
 
@@ -337,8 +354,8 @@ textarea {
 .brand-mark {
   display: grid;
   place-items: center;
-  width: 46px;
-  height: 46px;
+  width: 42px;
+  height: 42px;
   border: 1px solid var(--bronze);
   border-radius: 50%;
   color: var(--gold);
@@ -352,7 +369,7 @@ p {
 }
 
 h1 {
-  font-size: 19px;
+  font-size: 18px;
   font-weight: 700;
   letter-spacing: 0;
 }
@@ -379,6 +396,7 @@ input {
   color: var(--ink);
   outline: 0;
   padding: 11px 12px;
+  font-size: 16px;
 }
 
 input:focus {
@@ -393,6 +411,7 @@ button {
   background: #3b2c20;
   color: var(--ink);
   cursor: pointer;
+  font-size: 13px;
 }
 
 button:hover {
@@ -401,9 +420,9 @@ button:hover {
 
 .command {
   position: absolute;
-  left: 12px;
-  right: 12px;
-  bottom: 12px;
+  left: 8px;
+  right: 8px;
+  bottom: 8px;
   z-index: 6;
   display: grid;
   grid-template-columns: auto 1fr;
@@ -513,7 +532,7 @@ button:hover {
   display: grid;
   justify-items: center;
   gap: 7px;
-  width: 82px;
+  width: 76px;
   min-height: 86px;
   padding: 8px 6px;
   border: 1px solid transparent;
@@ -550,13 +569,13 @@ button:hover {
 
 .file-window {
   position: absolute;
-  left: min(120px, 8vw);
-  top: min(80px, 8vh);
+  left: 8px;
+  top: 8px;
   z-index: 4;
   display: grid;
   grid-template-rows: auto 1fr;
-  width: min(720px, calc(100% - 34px));
-  height: min(520px, calc(100% - 34px));
+  width: calc(100% - 16px);
+  height: calc(100% - 16px);
   border: 1px solid var(--line);
   border-radius: 8px;
   background: #18140f;
@@ -570,11 +589,12 @@ button:hover {
 
 .file-window-top {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
+  flex-direction: column;
   justify-content: space-between;
   gap: 12px;
-  min-height: 42px;
-  padding: 0 12px;
+  min-height: 78px;
+  padding: 9px 10px;
   border-bottom: 1px solid var(--line-soft);
   background: #2a2119;
 }
@@ -589,9 +609,11 @@ button:hover {
 .file-window-top div {
   display: flex;
   gap: 8px;
+  width: 100%;
 }
 
 .file-window-top button {
+  flex: 1;
   min-height: 30px;
   padding: 0 10px;
 }
@@ -617,7 +639,7 @@ button:hover {
 
 .terminal-output {
   overflow: auto;
-  padding: 16px 18px;
+  padding: 13px;
   white-space: pre-wrap;
   line-height: 1.55;
 }
@@ -628,17 +650,20 @@ button:hover {
 
 .terminal-form {
   display: grid;
-  grid-template-columns: auto 1fr;
+  grid-template-columns: 1fr;
   align-items: center;
-  gap: 8px;
-  min-height: 42px;
-  padding: 0 14px;
+  gap: 4px;
+  min-height: 64px;
+  padding: 7px 12px;
   border-top: 1px solid #223226;
   background: #0b100d;
 }
 
 #terminalPrompt {
   color: #8ccf7a;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
 #terminalInput {
@@ -653,7 +678,7 @@ button:hover {
   position: fixed;
   z-index: 20;
   display: grid;
-  width: 168px;
+  width: min(210px, calc(100vw - 16px));
   padding: 6px;
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -666,7 +691,7 @@ button:hover {
 }
 
 .context-menu button {
-  min-height: 32px;
+  min-height: 40px;
   border: 0;
   border-radius: 6px;
   background: transparent;
@@ -684,12 +709,12 @@ button:hover {
 }
 
 .status {
-  grid-template-columns: auto auto auto 1fr;
+  grid-template-columns: auto auto auto;
   gap: 12px;
-  padding: 0 16px;
+  padding: 7px 10px;
   border-top: 1px solid var(--line);
   color: var(--muted);
-  font-size: 12px;
+  font-size: 11px;
 }
 
 #mode {
@@ -701,111 +726,126 @@ button:hover {
 }
 
 #message {
+  grid-column: 1 / -1;
   min-width: 0;
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
-  text-align: right;
+  text-align: left;
 }
 
-@media (max-width: 760px) {
-  body {
-    overflow: auto;
-  }
-
+@media (min-width: 761px) {
   .shell {
-    min-height: 100dvh;
-    padding: 0;
+    min-height: 100vh;
+    padding: 18px;
   }
 
   .terminal {
-    width: 100%;
-    height: 100dvh;
-    border: 0;
-    border-radius: 0;
-  }
-
-  .terminal::before,
-  .terminal::after {
-    display: none;
+    width: min(1180px, 100%);
+    height: calc(100vh - 36px);
+    border: 1px solid var(--line);
+    border-radius: 8px;
   }
 
   .topbar {
-    grid-template-columns: 1fr auto;
-    gap: 10px;
+    grid-template-columns: auto 1fr auto;
+    gap: 14px;
+    padding: 0 16px;
   }
 
   .traffic {
-    display: none;
+    display: flex;
   }
 
-  .top-actions {
-    gap: 8px;
-  }
-
-  .net {
-    display: none;
-  }
-
-  .share-button {
-    min-height: 34px;
-    padding: 0 10px;
-  }
-
-  .mode-button {
-    min-height: 34px;
-    padding: 0 9px;
-  }
-
-  .desktop {
-    grid-template-columns: 1fr;
-  }
-
-  .pane {
-    display: none;
-  }
-
-  .editor-wrap::before {
-    inset: 8px;
-  }
-
-  #editor {
-    padding: 18px;
+  .promptline {
     font-size: 14px;
   }
 
+  .net {
+    display: block;
+  }
+
+  .top-actions {
+    justify-content: flex-end;
+    gap: 10px;
+  }
+
+  .share-button {
+    min-height: 32px;
+    padding: 0 12px;
+  }
+
+  .mode-button {
+    min-height: 32px;
+    padding: 0 11px;
+  }
+
+  .desktop {
+    grid-template-columns: 230px 1fr;
+  }
+
+  .pane {
+    display: block;
+  }
+
+  .editor-wrap::before {
+    inset: 12px;
+  }
+
+  #editor {
+    padding: 24px;
+    font-size: 15px;
+  }
+
+  .boot {
+    padding: 18px;
+  }
+
   .file-window {
-    left: 8px;
-    top: 8px;
-    width: calc(100% - 16px);
-    height: calc(100% - 16px);
+    left: min(120px, 8vw);
+    top: min(80px, 8vh);
+    width: min(720px, calc(100% - 34px));
+    height: min(520px, calc(100% - 34px));
   }
 
   .file-window-top {
-    align-items: flex-start;
-    flex-direction: column;
-    padding: 9px 10px;
+    align-items: center;
+    flex-direction: row;
+    min-height: 42px;
+    padding: 0 12px;
   }
 
   .file-window-top div {
-    width: 100%;
+    width: auto;
   }
 
   .file-window-top button {
-    flex: 1;
+    flex: 0 0 auto;
   }
 
   .terminal-output {
-    padding: 13px;
+    padding: 16px 18px;
+  }
+
+  .terminal-form {
+    grid-template-columns: auto 1fr;
+    gap: 8px;
+    min-height: 42px;
+    padding: 0 14px;
+  }
+
+  #terminalPrompt {
+    max-width: 260px;
   }
 
   .status {
-    grid-template-columns: auto auto auto;
+    grid-template-columns: auto auto auto 1fr;
+    padding: 0 16px;
+    font-size: 12px;
   }
 
   #message {
-    grid-column: 1 / -1;
-    text-align: left;
-    padding-bottom: 8px;
+    grid-column: auto;
+    text-align: right;
   }
 }
