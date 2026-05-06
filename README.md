@@ -9,7 +9,7 @@ Nota temporal offline-first con sensacion de terminal/vim. Esta pensada para abr
 - Cifrado cliente: WebCrypto AES-GCM, derivado desde `pin + topic`.
 - Backend: Cloudflare Worker.
 - Base de datos: Cloudflare D1.
-- Shares publicos: snapshot cifrado de un archivo con expiracion corta en servidor.
+- Shares publicos protegidos con PIN: snapshot cifrado de un archivo con expiracion corta en servidor.
 
 ## Tema visual
 
@@ -30,7 +30,7 @@ Rapid Vimnote tiene dos modos para el mismo cuaderno cifrado:
 
 El boton `Modo nerd` / `Modo normal` cambia entre ambos sin cambiar de cuaderno.
 
-En movil, tocar un documento lo abre y toque prolongado abre el menu contextual. En modo nerd hay botones rapidos para `ls`, `cat`, `touch`, `vim`, `share` y `sync`.
+En movil, tocar un documento lo abre y toque prolongado abre el menu contextual. Los documentos se pueden mover arrastrandolos y renombrar desde el menu contextual o la ventana del archivo. En modo nerd hay botones rapidos para `ls`, `cat`, `touch`, `vim`, `share` y `sync`.
 
 ## Links faciles
 
@@ -44,13 +44,13 @@ Esa URL solo prellena el cuaderno. Para abrirlo desde otro navegador todavia nec
 
 El boton `Cuaderno` copia esa URL corta. Ese link abre el espacio/cuaderno, pero sigue pidiendo PIN.
 
-El boton `Archivo` comparte solo el contenido del archivo actual. Los links publicos de archivo ahora tambien son cortos:
+El boton `Archivo` comparte solo el contenido del archivo actual. Al compartir, eliges un PIN para abrir ese link. Los links publicos de archivo ahora tambien son cortos:
 
 ```text
 https://notas.dev/ab30d
 ```
 
-Para lograrlo, el share temporal guarda la llave del share en el servidor hasta que expire. El cuaderno privado no cambia: sigue cifrado con `PIN + cuaderno` y el PIN nunca llega al backend.
+Para lograrlo, el share temporal se cifra con un PIN de apertura. El servidor guarda el contenido cifrado y una sal temporal, pero no guarda el PIN ni la llave derivada. El cuaderno privado no cambia: sigue cifrado con `PIN + cuaderno` y el PIN nunca llega al backend.
 
 Si un link corto dice que no tiene llave temporal, fue creado antes de esta version o con cache vieja del navegador. Vuelve a compartir el archivo para generar un link corto nuevo.
 

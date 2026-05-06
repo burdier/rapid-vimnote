@@ -122,11 +122,14 @@ async function createShare(request, env) {
   if (body.shareKey !== undefined) {
     assertShareKey(body.shareKey);
   }
+  if (body.shareSalt !== undefined) {
+    assertShareSalt(body.shareSalt);
+  }
 
   const ttlSeconds = clampTtl(body.ttlSeconds);
   const now = Date.now();
   const expiresAt = now + ttlSeconds * 1000;
-  const topicOrKey = body.shareKey ? `key:${body.shareKey}` : body.topicId;
+  const topicOrKey = body.shareSalt ? `pin:${body.shareSalt}` : body.shareKey ? `key:${body.shareKey}` : body.topicId;
 
   await cleanupExpiredShares(env, now);
 
@@ -151,7 +154,7 @@ async function getShare(url, env) {
 
   const now = Date.now();
   const row = await env.DB.prepare(
-    "SELECT token, body_cipher, iv, expires_at, created_at FROM shares WHERE token = ?"
+    "SELECT token, topic_id, body_cipher, iv, expires_at, created_at FROM shares WHERE token = ?"
   ).bind(token).first();
 
   if (!row) {
@@ -163,11 +166,14 @@ async function getShare(url, env) {
     return json({ error: "expired" }, { status: 410 });
   }
 
+  const shareMeta = shareMetaFromTopic(row.topic_id);
+
   return json({
     token: row.token,
     bodyCipher: row.body_cipher,
     iv: row.iv,
-    shareKey: shareKeyFromTopic(row.topic_id),
+    shareKey: shareMeta.shareKey,
+    shareSalt: shareMeta.shareSalt,
     expiresAt: row.expires_at,
     createdAt: row.created_at
   });
@@ -214,6 +220,12 @@ function assertShareKey(value) {
   }
 }
 
+function assertShareSalt(value) {
+  if (typeof value !== "string" || !/^[A-Za-z0-9_-]{8,128}$/.test(value)) {
+    throw httpError("invalid_shareSalt", 400);
+  }
+}
+
 function assertCipher(value, field, limit) {
   if (typeof value !== "string" || value.length < 1 || value.length > limit) {
     throw httpError(`invalid_${field}`, 400);
@@ -224,11 +236,16 @@ function assertCipher(value, field, limit) {
   }
 }
 
-function shareKeyFromTopic(value) {
+function shareMetaFromTopic(value) {
   if (typeof value === "string" && value.startsWith("key:")) {
-    return value.slice(4);
+    return { shareKey: value.slice(4), shareSalt: "" };
   }
-  return "";
+
+  if (typeof value === "string" && value.startsWith("pin:")) {
+    return { shareKey: "", shareSalt: value.slice(4) };
+  }
+
+  return { shareKey: "", shareSalt: "" };
 }
 
 function randomCode(size) {

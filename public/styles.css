@@ -524,7 +524,7 @@ button:hover {
   position: absolute;
   inset: 0;
   overflow: hidden;
-  touch-action: manipulation;
+  touch-action: none;
   -webkit-touch-callout: none;
 }
 
@@ -541,7 +541,7 @@ button:hover {
   background: transparent;
   color: var(--ink);
   text-align: center;
-  touch-action: manipulation;
+  touch-action: none;
   -webkit-touch-callout: none;
   -webkit-user-select: none;
   user-select: none;
@@ -551,6 +551,13 @@ button:hover {
 .file-icon.selected {
   border-color: rgba(209, 176, 111, 0.4);
   background: rgba(31, 24, 18, 0.72);
+}
+
+.file-icon.dragging {
+  z-index: 3;
+  border-color: rgba(209, 176, 111, 0.75);
+  background: rgba(31, 24, 18, 0.86);
+  cursor: grabbing;
 }
 
 .file-icon span:last-child {

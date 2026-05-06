@@ -33,6 +33,7 @@ const els = {
   desktopWindowTitle: $("desktopWindowTitle"),
   desktopEditor: $("desktopEditor"),
   desktopShareButton: $("desktopShareButton"),
+  desktopRenameButton: $("desktopRenameButton"),
   desktopCloseButton: $("desktopCloseButton"),
   nerdShell: $("nerdShell"),
   terminalOutput: $("terminalOutput"),
@@ -62,6 +63,7 @@ const state = {
   touchedFile: "",
   touchMoved: false,
   suppressNextDesktopClick: false,
+  drag: null,
   editorOpen: false,
   yank: ""
 };
@@ -189,7 +191,13 @@ function wireEvents() {
     openDesktopFile(fileEl.dataset.file);
   });
 
+  els.desktopCanvas.addEventListener("pointerdown", handleDesktopPointerDown);
+  els.desktopCanvas.addEventListener("pointermove", handleDesktopPointerMove);
+  els.desktopCanvas.addEventListener("pointerup", handleDesktopPointerUp);
+  els.desktopCanvas.addEventListener("pointercancel", cancelDesktopPointer);
+
   els.desktopCanvas.addEventListener("touchstart", (event) => {
+    if (window.PointerEvent) return;
     const touch = event.touches[0];
     if (!touch) return;
     const fileEl = event.target.closest("[data-file]");
@@ -206,6 +214,7 @@ function wireEvents() {
   }, { passive: true });
 
   els.desktopCanvas.addEventListener("touchend", () => {
+    if (window.PointerEvent) return;
     clearTimeout(state.touchTimer);
     if (state.touchedFile && !state.touchMoved && !state.suppressNextDesktopClick) {
       openDesktopFile(state.touchedFile, false);
@@ -222,6 +231,7 @@ function wireEvents() {
   });
 
   els.desktopCanvas.addEventListener("touchmove", () => {
+    if (window.PointerEvent) return;
     state.touchMoved = true;
     clearTimeout(state.touchTimer);
   }, { passive: true });
@@ -247,6 +257,10 @@ function wireEvents() {
     const ttl = prompt("Tiempo para compartir: 30s, 5m, 15m, 1h", "5m") || "5m";
     await saveLocalNow();
     await createPublicShare(ttl, state.currentFile);
+  });
+
+  els.desktopRenameButton.addEventListener("click", () => {
+    promptRenameFile(state.currentFile);
   });
 
   els.topicList.addEventListener("click", async (event) => {
@@ -674,7 +688,9 @@ async function runContextAction(action) {
   hideContextMenu();
 
   if (action === "new-file") {
-    const name = uniqueFileName("nuevo.txt");
+    const requested = prompt("Nombre del archivo", nextUntitledFileName()) || "";
+    if (!requested.trim()) return;
+    const name = uniqueFileName(requested);
     createFile(name, "", state.contextPoint.x, state.contextPoint.y);
     openDesktopFile(name);
     markDirty(`creado ${name}`);
@@ -701,8 +717,7 @@ async function runContextAction(action) {
   }
 
   if (action === "rename-file") {
-    const next = normalizeFileName(prompt("Nuevo nombre", target) || "", target);
-    if (next && next !== target) renameFile(target, next);
+    promptRenameFile(target);
     return;
   }
 
@@ -729,6 +744,114 @@ function desktopPointFromTouch(touch) {
     x: Math.round(touch.clientX - rect.left),
     y: Math.round(touch.clientY - rect.top)
   };
+}
+
+function handleDesktopPointerDown(event) {
+  const fileEl = event.target.closest("[data-file]");
+  if (!fileEl || (event.pointerType === "mouse" && event.button !== 0)) return;
+
+  const fileName = fileEl.dataset.file;
+  const file = getFile(fileName);
+  if (!file) return;
+
+  state.contextTargetFile = fileName;
+  state.contextPoint = desktopPointFromEvent(event);
+  state.desktopSelectedFile = fileName;
+  els.desktopCanvas.querySelectorAll("[data-file]").forEach((element) => {
+    element.classList.toggle("selected", element.dataset.file === fileName);
+  });
+  fileEl.classList.add("dragging");
+
+  state.drag = {
+    fileName,
+    pointerId: event.pointerId,
+    startClientX: event.clientX,
+    startClientY: event.clientY,
+    startX: file.x || 28,
+    startY: file.y || 28,
+    moved: false,
+    longPress: false,
+    timer: setTimeout(() => {
+      if (!state.drag || state.drag.fileName !== fileName || state.drag.moved) return;
+      state.drag.longPress = true;
+      state.suppressNextDesktopClick = true;
+      if (navigator.vibrate) navigator.vibrate(18);
+      showContextMenu(event.clientX, event.clientY, true);
+    }, 560)
+  };
+
+  if (fileEl.setPointerCapture) {
+    fileEl.setPointerCapture(event.pointerId);
+  }
+}
+
+function handleDesktopPointerMove(event) {
+  if (!state.drag || state.drag.pointerId !== event.pointerId) return;
+
+  const dx = event.clientX - state.drag.startClientX;
+  const dy = event.clientY - state.drag.startClientY;
+  if (Math.abs(dx) < 6 && Math.abs(dy) < 6 && !state.drag.moved) return;
+
+  state.drag.moved = true;
+  clearTimeout(state.drag.timer);
+  const position = clampFilePosition(state.drag.startX + dx, state.drag.startY + dy);
+  const file = getFile(state.drag.fileName);
+  if (!file) return;
+  file.x = position.x;
+  file.y = position.y;
+
+  const fileEl = getDesktopFileElement(state.drag.fileName);
+  if (fileEl) {
+    fileEl.style.left = `${position.x}px`;
+    fileEl.style.top = `${position.y}px`;
+    fileEl.classList.add("dragging");
+  }
+  event.preventDefault();
+}
+
+function handleDesktopPointerUp(event) {
+  if (!state.drag || state.drag.pointerId !== event.pointerId) return;
+
+  const drag = state.drag;
+  clearTimeout(drag.timer);
+  const fileEl = getDesktopFileElement(drag.fileName);
+  if (fileEl) fileEl.classList.remove("dragging");
+  state.drag = null;
+
+  if (drag.moved) {
+    state.suppressNextDesktopClick = true;
+    setTimeout(() => {
+      state.suppressNextDesktopClick = false;
+    }, 450);
+    markDirty(`movido ${drag.fileName}`);
+    return;
+  }
+
+  if (drag.longPress) {
+    setTimeout(() => {
+      state.suppressNextDesktopClick = false;
+    }, 700);
+    return;
+  }
+
+  openDesktopFile(drag.fileName, event.pointerType !== "touch");
+  state.suppressNextDesktopClick = true;
+  setTimeout(() => {
+    state.suppressNextDesktopClick = false;
+  }, 450);
+}
+
+function cancelDesktopPointer() {
+  if (!state.drag) return;
+  clearTimeout(state.drag.timer);
+  const fileEl = getDesktopFileElement(state.drag.fileName);
+  if (fileEl) fileEl.classList.remove("dragging");
+  state.drag = null;
+}
+
+function getDesktopFileElement(fileName) {
+  return Array.from(els.desktopCanvas.querySelectorAll("[data-file]"))
+    .find((element) => element.dataset.file === fileName) || null;
 }
 
 async function runTerminalQuickCommand(command) {
@@ -1085,10 +1208,15 @@ async function createPublicShare(ttlText, fileName = state.currentFile) {
   }
 
   const ttlSeconds = parseTtl(ttlText);
-  const shareKey = await crypto.subtle.generateKey({ name: "AES-GCM", length: 256 }, true, ["encrypt", "decrypt"]);
+  const sharePin = prompt("PIN para abrir este archivo compartido", "");
+  if (!sharePin || !sharePin.trim()) {
+    renderStatus("share cancelado: PIN requerido");
+    return;
+  }
+
+  const shareSalt = base64url(randomBytes(16));
+  const shareKey = await deriveShareKey(sharePin.trim(), shareSalt);
   const encrypted = await encryptText(shareKey, file.content);
-  const raw = new Uint8Array(await crypto.subtle.exportKey("raw", shareKey));
-  const shareKeyText = base64url(raw);
 
   let data;
   try {
@@ -1098,7 +1226,7 @@ async function createPublicShare(ttlText, fileName = state.currentFile) {
         topicId: state.topicId,
         bodyCipher: encrypted.bodyCipher,
         iv: encrypted.iv,
-        shareKey: shareKeyText,
+        shareSalt,
         ttlSeconds
       }
     });
@@ -1194,15 +1322,28 @@ async function openShare(options = {}) {
       return true;
     }
 
-    keyText = keyText || data.shareKey || "";
-    if (!keyText) {
+    let key;
+    if (keyText || data.shareKey) {
+      key = await crypto.subtle.importKey("raw", fromBase64url(keyText || data.shareKey), { name: "AES-GCM" }, false, ["decrypt"]);
+    } else if (data.shareSalt) {
+      const pin = prompt("PIN para abrir este archivo compartido", "");
+      if (!pin || !pin.trim()) {
+        els.shareText.textContent = "PIN requerido para abrir este archivo compartido.";
+        return true;
+      }
+      key = await deriveShareKey(pin.trim(), data.shareSalt);
+    } else {
       els.shareText.textContent = "este share no tiene llave temporal. Vuelve a compartir el archivo para generar un link corto nuevo.";
       return true;
     }
 
-    const keyBytes = fromBase64url(keyText);
-    const key = await crypto.subtle.importKey("raw", keyBytes, { name: "AES-GCM" }, false, ["decrypt"]);
-    const text = await decryptText(key, data.iv, data.bodyCipher);
+    let text;
+    try {
+      text = await decryptText(key, data.iv, data.bodyCipher);
+    } catch {
+      els.shareText.textContent = "PIN incorrecto o archivo compartido corrupto.";
+      return true;
+    }
     els.shareText.textContent = text || "(vacio)";
     els.shareMeta.textContent = `archivo compartido | expira ${new Date(data.expiresAt).toLocaleString()}`;
     return true;
@@ -1410,6 +1551,12 @@ function renameFile(from, to) {
   markDirty(`renombrado ${target}`);
 }
 
+function promptRenameFile(fileName) {
+  if (!fileName || !getFile(fileName)) return;
+  const next = normalizeFileName(prompt("Nuevo nombre", fileName) || "", fileName);
+  if (next && next !== fileName) renameFile(fileName, next);
+}
+
 function deleteFile(name, ask = true) {
   const fileName = normalizeFileName(name, "");
   if (!fileName || !state.workspace.files[fileName]) return;
@@ -1499,6 +1646,17 @@ async function deriveSession(pin, topic) {
   const key = await crypto.subtle.importKey("raw", encBytes, { name: "AES-GCM" }, false, ["encrypt", "decrypt"]);
   const topicId = base64url(new Uint8Array(await crypto.subtle.digest("SHA-256", authBytes)));
   return { key, topicId };
+}
+
+async function deriveShareKey(pin, salt) {
+  const material = await crypto.subtle.importKey("raw", encoder.encode(pin), "PBKDF2", false, ["deriveBits"]);
+  const bits = await crypto.subtle.deriveBits({
+    name: "PBKDF2",
+    salt: encoder.encode(`rapid-vimnote:share:v1:${salt}`),
+    iterations: 70000,
+    hash: "SHA-256"
+  }, material, 256);
+  return crypto.subtle.importKey("raw", bits, { name: "AES-GCM" }, false, ["encrypt", "decrypt"]);
 }
 
 async function encryptText(key, text) {
@@ -1710,6 +1868,12 @@ function base64url(bytes) {
   let binary = "";
   for (const byte of bytes) binary += String.fromCharCode(byte);
   return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+}
+
+function randomBytes(size) {
+  const bytes = new Uint8Array(size);
+  crypto.getRandomValues(bytes);
+  return bytes;
 }
 
 function fromBase64url(value) {
