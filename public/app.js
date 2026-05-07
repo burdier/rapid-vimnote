@@ -3,6 +3,7 @@ const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 
 const WORKSPACE_MARKER = "rapid-vimnote.workspace.v2";
+const INTRO_SEEN_KEY = "rapid-vimnote:intro-seen";
 const WALLPAPERS = ["walnut", "moss", "wine", "blue"];
 
 const els = {
@@ -20,6 +21,10 @@ const els = {
   dirty: $("dirty"),
   message: $("message"),
   netState: $("netState"),
+  aboutButton: $("aboutButton"),
+  introOverlay: $("introOverlay"),
+  introStartButton: $("introStartButton"),
+  introCloseButton: $("introCloseButton"),
   topicLinkButton: $("topicLinkButton"),
   modeSwitchButton: $("modeSwitchButton"),
   wallpaperButton: $("wallpaperButton"),
@@ -95,6 +100,7 @@ async function init() {
   els.pinInput.focus();
   setVimMode("locked");
   applyUiMode("normal");
+  showIntroOnce();
 }
 
 function wireEvents() {
@@ -106,6 +112,23 @@ function wireEvents() {
   });
   window.addEventListener("keydown", (event) => {
     if (event.key === "Escape") hideContextMenu();
+    if (event.key === "Escape" && !els.introOverlay.hidden) hideIntro();
+  });
+
+  els.aboutButton.addEventListener("click", () => {
+    showIntro();
+  });
+
+  els.introStartButton.addEventListener("click", () => {
+    hideIntro();
+  });
+
+  els.introCloseButton.addEventListener("click", () => {
+    hideIntro();
+  });
+
+  els.introOverlay.addEventListener("click", (event) => {
+    if (event.target === els.introOverlay) hideIntro();
   });
 
   els.loginForm.addEventListener("submit", async (event) => {
@@ -1416,6 +1439,27 @@ function renderStatus(message) {
 
 function flash(message) {
   els.message.textContent = message;
+}
+
+function showIntroOnce() {
+  if (localStorage.getItem(INTRO_SEEN_KEY) === "1") return;
+  showIntro();
+}
+
+function showIntro() {
+  els.introOverlay.hidden = false;
+  requestAnimationFrame(() => {
+    els.introStartButton.focus();
+  });
+}
+
+function hideIntro() {
+  if (els.introOverlay.hidden) return;
+  els.introOverlay.hidden = true;
+  localStorage.setItem(INTRO_SEEN_KEY, "1");
+  if (!els.boot.hidden) {
+    els.pinInput.focus();
+  }
 }
 
 function resetShareShellForLogin() {

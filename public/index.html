@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
     <meta name="theme-color" content="#17130f">
-    <meta name="description" content="Nota temporal offline-first con editor tipo vim.">
+    <meta name="description" content="Cuaderno privado offline-first con URL corta, PIN y shares temporales.">
     <title>Rapid Vimnote</title>
     <link rel="manifest" href="/manifest.webmanifest">
     <link rel="stylesheet" href="/styles.css">
@@ -26,8 +26,28 @@
             <button class="mode-button" id="modeSwitchButton" type="button" hidden>Nerd</button>
             <button class="mode-button" id="wallpaperButton" type="button" hidden>Fondo</button>
             <button class="share-button" id="shareButton" type="button" hidden>Archivo</button>
+            <button class="about-button" id="aboutButton" type="button">Acerca</button>
           </div>
         </header>
+
+        <section class="intro-overlay" id="introOverlay" role="dialog" aria-modal="true" aria-labelledby="introTitle" hidden>
+          <div class="intro-panel">
+            <button class="intro-close" id="introCloseButton" type="button" aria-label="Cerrar acerca">Cerrar</button>
+            <p class="intro-kicker">v-00.uk / rapid vimnote</p>
+            <h2 id="introTitle">Notas rapidas, recordables y privadas.</h2>
+            <p class="intro-lead">
+              Escribe algo desde el cell, abre el mismo cuaderno desde otro browser y recuerda solo una URL corta, un topico y tu PIN.
+            </p>
+            <div class="intro-link">v-00.uk/ideas + PIN</div>
+            <div class="intro-points">
+              <p><strong>URL memorable.</strong> Usa topicos cortos como <span>/ideas</span>, <span>/junior</span> o <span>/hoy</span>.</p>
+              <p><strong>PIN local.</strong> El PIN no se envia al servidor; se usa en tu navegador para cifrar y abrir.</p>
+              <p><strong>Backend ciego.</strong> Cloudflare guarda texto cifrado. Sin PIN, solo hay datos ilegibles.</p>
+              <p><strong>Shares temporales.</strong> Compartes un archivo por minutos, tambien protegido con PIN.</p>
+            </div>
+            <button class="intro-start" id="introStartButton" type="button">Entrar al cuaderno</button>
+          </div>
+        </section>
 
         <div class="desktop">
           <aside class="pane">

@@ -1,4 +1,4 @@
-const CACHE_NAME = "rapid-vimnote-shell-v2";
+const CACHE_NAME = "rapid-vimnote-shell-v3";
 const SHELL = [
   "/",
   "/index.html",
